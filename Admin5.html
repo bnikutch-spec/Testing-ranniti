@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Super Admin — Ranniti 5 | BNI Kutch</title>
+  <link rel="icon" href="https://ranniti5.bnikutch.com/favicon.png" type="image/png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #1c1717;
+      --card: #241e1e;
+      --primary: #ea1e25;
+      --muted: #9a8f8f;
+      --border: rgba(255,255,255,0.1);
+      --white: #faf7f6;
+      --green: #22c55e;
+      --yellow: #eab308;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--white);
+      font-family: Barlow, sans-serif;
+    }
+    h1, h2, h3 { font-family: "Bebas Neue", Impact, sans-serif; letter-spacing: .04em; margin: 0; }
+    a { color: inherit; text-decoration: none; }
+    .top {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 20px 32px; border-bottom: 1px solid var(--border);
+      background: rgba(28,23,23,.85); position: sticky; top: 0; z-index: 20; backdrop-filter: blur(16px);
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand img { height: 36px; background: #fff; padding: 4px; border-radius: 6px; }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 40px 24px 80px; }
+    .head { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 28px; gap: 16px; flex-wrap: wrap; }
+    .head p { color: var(--muted); margin: 8px 0 0; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; font-weight: 700; }
+    .tabs { display: flex; gap: 6px; flex-wrap: wrap; background: var(--card); border: 1px solid var(--border); padding: 6px; border-radius: 12px; width: fit-content; margin-bottom: 24px; }
+    .tabs button {
+      background: transparent; border: 0; color: var(--muted); padding: 10px 16px; border-radius: 8px;
+      font-weight: 700; font-size: 13px; cursor: pointer; font-family: inherit;
+    }
+    .tabs button.active { background: var(--primary); color: #fff; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; }
+    .stats { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-bottom: 24px; }
+    .stat h3 { font-size: 13px; color: var(--muted); font-family: Barlow, sans-serif; font-weight: 600; text-transform: none; letter-spacing: 0; }
+    .stat b { display: block; font-size: 28px; margin-top: 8px; font-family: "Bebas Neue", sans-serif; }
+    .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+    input, select {
+      background: rgba(255,255,255,.05); border: 1px solid var(--border); color: #fff;
+      border-radius: 8px; padding: 10px 12px; font-family: inherit; font-size: 14px;
+    }
+    input { min-width: 240px; }
+    button.action {
+      background: transparent; border: 1px solid var(--border); color: #fff; border-radius: 8px;
+      padding: 10px 14px; cursor: pointer; font-family: inherit; font-weight: 600;
+    }
+    button.action.primary { background: var(--primary); border-color: var(--primary); }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th { text-align: left; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); padding: 12px; border-bottom: 1px solid var(--border); }
+    td { padding: 14px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    tr:hover td { background: rgba(255,255,255,.03); }
+    .pill { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; }
+    .paid { background: rgba(34,197,94,.15); color: var(--green); }
+    .pending { background: rgba(234,179,8,.15); color: var(--yellow); }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--primary); font-size: 12px; }
+    .linkish { background: none; border: 0; color: var(--primary); cursor: pointer; font-weight: 700; font-family: inherit; }
+    .gateway { display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+    .scanner-box { border: 2px dashed var(--border); border-radius: 16px; padding: 32px; text-align: center; background: rgba(255,255,255,.02); }
+    .cam { width: 260px; height: 180px; margin: 0 auto 16px; border-radius: 12px; background: #111; display: grid; place-items: center; color: var(--muted); }
+    .hidden { display: none !important; }
+    .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.65); display: grid; place-items: center; z-index: 50; }
+    .modal { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; width: min(420px, 92vw); }
+    .modal h2 { margin-bottom: 16px; }
+    .modal label { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 6px; }
+    .modal input, .modal select { width: 100%; }
+    .row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+    .attendee { display: flex; justify-content: space-between; align-items: center; padding: 14px; border: 1px solid var(--border); border-radius: 12px; margin-top: 10px; }
+    .ok { border-color: rgba(34,197,94,.3); background: rgba(34,197,94,.08); }
+    .login-bg { position: fixed; inset: 0; display: grid; place-items: center; background: var(--bg); z-index: 100; }
+    .login-card { width: min(420px, 92vw); background: var(--card); border: 1px solid var(--border); padding: 28px; }
+    .login-card label { display: block; margin-top: 14px; color: var(--muted); font-size: 12px; }
+    .login-card input { display: block; width: 100%; margin-top: 6px; }
+    .login-card button { margin-top: 20px; width: 100%; }
+    #loginMessage { color: #f87171; margin-top: 12px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <a class="brand" href="/Admin5.html">
+      <img src="https://ranniti5.bnikutch.com/__l5e/assets-v1/76b9250f-a5af-4bcb-89fa-e47c73ba89c5/ranniti-5-logo.png" alt="Ranniti 5" />
+      <span>Ranniti 5 Admin</span>
+    </a>
+    <a href="/">← Back to event</a>
+  </div>
+
+  <div class="login-bg" id="adminLogin">
+    <form class="login-card" id="adminLoginForm">
+      <h1 style="font-size:36px;color:var(--primary);">Admin sign in</h1>
+      <p style="color:var(--muted);margin-top:8px;">Sign in to review payments and view private screenshots.</p>
+      <label>Email<input id="adminEmail" type="email" autocomplete="username" required /></label>
+      <label>Password<input id="adminPassword" type="password" autocomplete="current-password" required /></label>
+      <button class="action primary" type="submit">Sign in</button>
+      <p id="loginMessage"></p>
+    </form>
+  </div>
+
+  <main class="wrap hidden" id="adminMain">
+    <div class="head">
+      <div>
+        <h1 style="font-size:42px;color:var(--primary);">Super Admin</h1>
+        <p>Manage Ranniti 5 registrations, payments, scanners and entry.</p>
+      </div>
+      <span class="badge">● Admin</span>
+    </div>
+
+    <div class="tabs" id="tabs">
+      <button class="active" data-tab="registrations">Registrations</button>
+      <button data-tab="verification">Payment Verification</button>
+      <button data-tab="payments">Payments</button>
+      <button data-tab="gateways">Gateways</button>
+      <button data-tab="scanners">Scanners</button>
+      <button data-tab="scanner">Entry Scanner</button>
+    </div>
+
+    <section class="panel active" id="registrations">
+      <div class="card">
+        <div class="toolbar">
+          <input id="search" placeholder="Search name, ticket, email, UTR…" />
+          <button class="action" id="exportBtn">Export CSV</button>
+        </div>
+        <div style="overflow:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Delegate</th>
+                <th>Category</th>
+                <th>Ticket</th>
+                <th>Payment</th>
+                <th>Attendance</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="regBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:20px;">
+        <h2 style="margin-bottom:16px;">Add Registration</h2>
+        <form id="registrationForm">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;">
+            <div>
+              <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">Full Name</label>
+              <input name="full_name" placeholder="Full Name" required />
+            </div>
+            <div>
+              <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">Email</label>
+              <input name="email" type="email" placeholder="Email" required />
+            </div>
+            <div>
+              <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">Phone</label>
+              <input name="phone" placeholder="Phone" />
+            </div>
+            <div>
+              <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">Category</label>
+              <select name="category">
+                <option value="Delegate">Delegate</option>
+                <option value="Guest">Guest</option>
+                <option value="VIP">VIP</option>
+              </select>
+            </div>
+            <div>
+              <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">Base Amount</label>
+              <input name="amount" id="baseAmount" type="number" value="1500" min="0" step="0.01" />
+              <div style="margin-top:8px;font-size:13px;color:var(--muted);">Total to collect: <strong id="totalAmount" style="color:var(--white);">₹1,770</strong></div>
+            </div>
+            <div>
+              <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">Payment Status</label>
+              <select name="payment_status">
+                <option value="pending">Pending</option>
+                <option value="paid">Paid</option>
+              </select>
+            </div>
+            <div>
+              <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">Payment ID</label>
+              <input name="payment_id" placeholder="Payment ID" />
+            </div>
+            <div>
+              <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">Ticket Code</label>
+              <input name="ticket_code" placeholder="RN5-XXXX-XXXX" />
+            </div>
+            <div>
+              <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">QR Code</label>
+              <input name="qr_code" placeholder="QR Data" />
+            </div>
+          </div>
+          <div class="row">
+            <button class="action primary" type="submit">Save Registration</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section class="panel" id="verification">
+      <div class="card">
+        <div class="toolbar">
+          <input id="paymentSearch" placeholder="Search member, registration ID or UTR" />
+          <select id="paymentFilter">
+            <option value="">All payment statuses</option>
+            <option value="verification_pending">Verification pending</option>
+            <option value="verified">Verified</option>
+            <option value="rejected">Rejected</option>
+            <option value="pending">Pending payment</option>
+          </select>
+        </div>
+        <div style="overflow:auto;"><table><thead><tr><th>Member / ID</th><th>Package</th><th>Total Amount</th><th>Provider / UTR</th><th>Screenshot</th><th>Status</th><th>Action</th></tr></thead><tbody id="paymentBody"></tbody></table></div>
+      </div>
+    </section>
+
+    <section class="panel" id="payments">
+      <div class="stats">
+        <div class="card stat"><h3>Total Revenue</h3><b id="revPaid">₹0</b><p>From paid tickets</p></div>
+        <div class="card stat"><h3>Pending Payments</h3><b id="revPend">₹0</b><p>Awaiting verification</p></div>
+        <div class="card stat"><h3>Active Gateway</h3><b id="gwName">Manual UPI</b><p>Verification portal</p></div>
+      </div>
+    </section>
+
+    <section class="panel" id="gateways">
+      <div class="card">
+        <h2 style="margin-bottom:16px;">Payment Gateways</h2>
+        <div class="gateway">
+          <div>
+            <strong>Manual UPI Verification</strong>
+            <p style="color:var(--muted);font-size:13px;">GPay, PhonePe, Paytm — UTR + screenshot</p>
+          </div>
+          <span class="pill paid" id="upiBadge">Active</span>
+        </div>
+        <div class="gateway">
+          <div>
+            <strong>Razorpay Gateway</strong>
+            <p style="color:var(--muted);font-size:13px;">Cards, net banking, UPI checkout</p>
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+            <input type="checkbox" id="rzpEnable" style="min-width:auto;" /> Enable Razorpay
+          </label>
+        </div>
+        <p style="color:var(--muted);font-size:13px;margin-top:12px;">On the live app, API keys are stored in Admin → Gateways. This static page only toggles the display state.</p>
+        <div style="margin-top:24px;border-top:1px solid var(--border);padding-top:20px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;"><h3>Manual payment providers</h3><button class="action primary" id="addProvider">Add provider</button></div>
+          <div id="providerBody"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="scanners">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:12px;flex-wrap:wrap;">
+          <div>
+            <h2>Scanner Management</h2>
+            <p style="color:var(--muted);">Accounts restricted to ticket scanning only.</p>
+          </div>
+          <button class="action primary" id="addScanner">Add Scanner</button>
+        </div>
+        <table>
+          <thead><tr><th>Email</th><th>Last activity</th><th>Created</th><th></th></tr></thead>
+          <tbody id="scannerBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" id="scanner">
+      <div class="card">
+        <h2>Event Entry Scanner</h2>
+        <p style="color:var(--muted);margin-bottom:20px;">Scan a delegate QR or type the ticket code (RN5-XXXX-XXXX).</p>
+        <div id="scanCam" class="scanner-box">
+          <div class="cam">Camera preview (use live app for device camera)</div>
+          <p style="color:var(--primary);font-weight:700;margin-bottom:16px;">Manual Entry</p>
+          <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+            <input id="manualCode" placeholder="RN5-XXXX-XXXX" style="text-transform:uppercase;" />
+            <button class="action primary" id="verifyBtn">Verify</button>
+          </div>
+        </div>
+        <div id="scanResult" class="hidden" style="margin-top:20px;"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="modal" class="modal-bg hidden">
+    <div class="modal">
+      <h2 id="modalTitle">Edit registration</h2>
+      <label>Full name</label>
+      <input id="editName" />
+      <label>Payment status</label>
+      <select id="editStatus">
+        <option value="pending">Pending</option>
+        <option value="paid">Paid</option>
+      </select>
+      <div class="row">
+        <button class="action" id="cancelEdit">Cancel</button>
+        <button class="action primary" id="saveEdit">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let regs = [
+      { id: 1, name: 'Aarav Patel', email: 'aarav@example.com', category: 'Delegate', ticket: 'RN5-0012-0001', status: 'paid', amount: 1500, ref: 'UPI-001', checked: 'Hall A', provider: 'GPay', utr: 'UTR-22A' },
+      { id: 2, name: 'Nisha Shah', email: 'nisha@example.com', category: 'Guest', ticket: 'RN5-0012-0002', status: 'pending', amount: 1200, ref: 'UPI-002', checked: '', provider: 'PhonePe', utr: 'UTR-22B' },
+      { id: 3, name: 'Rohan Mehta', email: 'rohan@example.com', category: 'VIP', ticket: 'RN5-0012-0003', status: 'verified', amount: 2500, ref: 'UPI-003', checked: 'VIP Lounge', provider: 'Razorpay', utr: 'UTR-22C' }
+    ];
+    let scanners = [
+      { email: 'scanner1@bnikutch.com', last: '10 mins ago', created: '2026-08-22' },
+      { email: 'scanner2@bnikutch.com', last: '1 day ago', created: '2026-08-15' }
+    ];
+
+    const inr = (n) => Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+    const totalWithGst = (baseAmount) => Math.round(Number(baseAmount || 0) * 1.18 * 100) / 100;
+
+    function renderRegs(filter = '') {
+      const q = String(filter).toLowerCase();
+      const rows = regs.filter(r => {
+        const hay = `${r.name || ''} ${r.ticket || ''} ${r.email || ''} ${r.ref || ''}`.toLowerCase();
+        return hay.includes(q);
+      });
+
+      document.getElementById('regBody').innerHTML = rows.map(r => `
+        <tr>
+          <td><div>${r.name}</div><div style="font-size:11px;color:var(--muted)">${r.email}</div></td>
+          <td>${r.category}</td>
+          <td class="mono">${r.ticket}</td>
+          <td><span class="pill ${r.status === 'paid' ? 'paid' : 'pending'}">${r.status}</span>${r.ref ? `<div class="mono" style="opacity:.7;margin-top:4px;">${r.ref}</div>` : ''}</td>
+          <td>${r.checked ? `<span style="color:var(--green)">In ${r.checked}</span>` : `<span style="color:var(--muted);font-style:italic;">Not in</span>`}</td>
+          <td><button class="linkish" data-edit="${r.id}">Edit</button></td>
+        </tr>
+      `).join('') || `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:40px;">No registrations found.</td></tr>`;
+
+      const paid = regs.filter(r => String(r.status).toLowerCase() === 'paid');
+      const pend = regs.filter(r => String(r.status).toLowerCase() !== 'paid');
+      document.getElementById('revPaid').textContent = '₹' + inr(paid.reduce((a, r) => a + totalWithGst(r.amount), 0));
+      document.getElementById('revPend').textContent = '₹' + inr(pend.reduce((a, r) => a + totalWithGst(r.amount), 0));
+    }
+
+    function renderScanners() {
+      document.getElementById('scannerBody').innerHTML = scanners.map((s, i) => `
+        <tr>
+          <td>${s.email}</td>
+          <td style="color:var(--muted)">${s.last}</td>
+          <td style="color:var(--muted)">${s.created}</td>
+          <td><button class="linkish" data-del="${i}">Delete</button></td>
+        </tr>
+      `).join('');
+    }
+
+    function renderPayments() {
+      const query = String(document.getElementById('paymentSearch')?.value || '').toLowerCase();
+      const filter = document.getElementById('paymentFilter')?.value || '';
+      const rows = regs.filter(r => {
+        const hay = `${r.name} ${r.id || ''} ${r.ticket} ${r.utr}`.toLowerCase();
+        return hay.includes(query) && (!filter || r.status === filter);
+      });
+
+      document.getElementById('paymentBody').innerHTML = rows.map(r => `
+        <tr>
+          <td><strong>${r.name}</strong><div class="mono">${r.id || r.ticket}</div></td>
+          <td>${r.category}</td><td>₹${inr(totalWithGst(r.amount))}</td>
+          <td>${r.provider || '-'}<div class="mono">${r.utr || '-'}</div></td>
+          <td>-</td>
+          <td><span class="pill ${r.status === 'paid' ? 'paid' : 'pending'}">${r.status.replaceAll('_', ' ')}</span></td>
+          <td>${r.status === 'pending' ? `<button class="action primary" data-approve="${r.id}">Verify</button>` : '-'}</td>
+        </tr>
+      `).join('') || `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:40px;">No payment submissions found.</td></tr>`;
+    }
+
+    document.getElementById('tabs').addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b === btn));
+      document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === btn.dataset.tab));
+    });
+
+    document.getElementById('search').addEventListener('input', (e) => renderRegs(e.target.value));
+    document.getElementById('paymentSearch').addEventListener('input', renderPayments);
+    document.getElementById('paymentFilter').addEventListener('change', renderPayments);
+
+    let editId = null;
+
+    document.getElementById('regBody').addEventListener('click', (e) => {
+      const id = e.target.dataset.edit;
+      if (!id) return;
+      const r = regs.find(x => String(x.id) === String(id));
+      if (!r) return;
+      editId = r.id;
+      document.getElementById('editName').value = r.name;
+      document.getElementById('editStatus').value = r.status;
+      document.getElementById('modal').classList.remove('hidden');
+    });
+
+    document.getElementById('cancelEdit').onclick = () => document.getElementById('modal').classList.add('hidden');
+    document.getElementById('saveEdit').onclick = () => {
+      const r = regs.find(x => String(x.id) === String(editId));
+      if (!r) return;
+      r.name = document.getElementById('editName').value;
+      r.status = document.getElementById('editStatus').value;
+      document.getElementById('modal').classList.add('hidden');
+      renderRegs(document.getElementById('search').value);
+      renderPayments();
+    };
+
+    document.getElementById('exportBtn').onclick = () => {
+      const header = 'Name,Email,Category,Ticket,Status,Amount\n';
+      const csv = header + regs.map(r => `"${r.name}","${r.email}","${r.category}","${r.ticket}","${r.status}",${r.amount}`).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'Ranniti5_Registrations.csv';
+      a.click();
+    };
+
+    document.getElementById('addScanner').onclick = () => {
+      const email = prompt('Scanner email');
+      if (!email) return;
+      scanners.push({ email, last: 'Never', created: new Date().toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) });
+      renderScanners();
+    };
+
+    document.getElementById('scannerBody').addEventListener('click', (e) => {
+      if (e.target.dataset.del == null) return;
+      scanners.splice(Number(e.target.dataset.del), 1);
+      renderScanners();
+    });
+
+    document.getElementById('rzpEnable').addEventListener('change', (e) => {
+      const on = e.target.checked;
+      document.getElementById('gwName').textContent = on ? 'Razorpay' : 'Manual UPI';
+      document.getElementById('upiBadge').textContent = on ? 'Fallback' : 'Active';
+    });
+
+    document.getElementById('addProvider').onclick = () => {
+      const name = prompt('Provider name (for example GPay)');
+      const upiId = name && prompt('UPI recipient ID');
+      if (!name || !upiId) return;
+      alert('Provider saved locally for demo.');
+    };
+
+    function resetScan() {
+      document.getElementById('scanResult').classList.add('hidden');
+      document.getElementById('scanCam').classList.remove('hidden');
+    }
+
+    function showScan(code) {
+      const target = String(code || '').toUpperCase().trim();
+      const r = regs.find(x => String(x.ticket || '').toUpperCase().trim() === target);
+      const box = document.getElementById('scanResult');
+      document.getElementById('scanCam').classList.add('hidden');
+      box.classList.remove('hidden');
+
+      if (!r) {
+        box.innerHTML = `<p style="color:#f87171;">Ticket not found.</p><button class="action" id="backScan">Back to scanner</button>`;
+        document.getElementById('backScan').onclick = resetScan;
+        return;
+      }
+
+      box.innerHTML = `
+        <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+          <div>
+            <h2 style="font-size:28px;">${r.name}</h2>
+            <p style="color:var(--muted)">${r.email}</p>
+            <span class="pill ${r.status === 'paid' ? 'paid' : 'pending'}">${r.status}</span>
+            <span class="pill pending" style="margin-left:6px;">${r.category}</span>
+          </div>
+          ${r.status !== 'paid' ? `<p style="color:#f87171;">Payment confirmation required for entry</p>` : ''}
+        </div>
+        <div class="row"><button class="action" id="backScan">Close details</button></div>
+      `;
+      document.getElementById('backScan').onclick = resetScan;
+    }
+
+    document.getElementById('verifyBtn').onclick = () => showScan(document.getElementById('manualCode').value);
+
+    document.getElementById('registrationForm').onsubmit = (e) => {
+      e.preventDefault();
+      const data = Object.fromEntries(new FormData(e.target).entries());
+      data.id = Date.now();
+      data.name = data.full_name;
+      data.email = data.email;
+      data.category = data.category;
+      data.ticket = data.ticket_code || 'RN5-' + Math.random().toString().slice(2, 10);
+      data.status = data.payment_status;
+      data.amount = Number(data.amount || 0);
+      data.ref = data.payment_id || 'MANUAL';
+      data.checked = '';
+      regs.unshift(data);
+      e.target.reset();
+      renderRegs(document.getElementById('search').value);
+      renderPayments();
+    };
+
+    document.getElementById('adminLoginForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const email = document.getElementById('adminEmail').value.trim();
+      const password = document.getElementById('adminPassword').value;
+
+      if (email && password) {
+        document.getElementById('adminLogin').classList.add('hidden');
+        document.getElementById('adminMain').classList.remove('hidden');
+      } else {
+        document.getElementById('loginMessage').textContent = 'Please enter valid admin credentials.';
+      }
+    });
+
+    document.getElementById('baseAmount').addEventListener('input', (e) => {
+      document.getElementById('totalAmount').textContent = '₹' + inr(totalWithGst(e.target.value));
+    });
+
+    renderRegs();
+    renderPayments();
+    renderScanners();
+  </script>
+</body>
+</html>
