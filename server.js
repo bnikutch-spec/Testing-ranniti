@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import authRoutes from './src/routes/auth.js';
 import userRoutes from './src/routes/users.js';
 
@@ -8,40 +10,43 @@ dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 5000;
+const currentFile = fileURLToPath(import.meta.url);
+const projectRoot = path.dirname(currentFile);
+const publicRoot = path.join(projectRoot, 'public');
 
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.get('/', (req, res) => {
-  res.sendFile('index.html', { root: 'public' });
+  res.sendFile(path.join(publicRoot, 'index.html'));
 });
 
 app.get('/admin', (req, res) => {
-  res.sendFile('Admin5.html', { root: '.' });
+  res.sendFile(path.join(projectRoot, 'Admin5.html'));
 });
 
 app.get('/auth', (req, res) => {
-  res.sendFile('Admin5.html', { root: '.' });
+  res.sendFile(path.join(projectRoot, 'Admin5.html'));
 });
 
 app.get('/register', (req, res) => {
-  res.sendFile('register.html', { root: 'public' });
+  res.sendFile(path.join(publicRoot, 'register.html'));
 });
 
 app.get('/payment', (req, res) => {
-  res.sendFile('payment.html', { root: 'public' });
+  res.sendFile(path.join(publicRoot, 'payment.html'));
 });
 
 app.get('/confirmation', (req, res) => {
-  res.sendFile('confirmation.html', { root: 'public' });
+  res.sendFile(path.join(publicRoot, 'confirmation.html'));
 });
 
 app.get('/Admin5.html', (req, res) => {
-  res.sendFile('Admin5.html', { root: '.' });
+  res.sendFile(path.join(projectRoot, 'Admin5.html'));
 });
 
-app.use(express.static('public'));
+app.use(express.static(publicRoot));
 
 app.get('/api', (req, res) => {
   res.json({
