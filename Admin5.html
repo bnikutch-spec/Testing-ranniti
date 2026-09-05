@@ -121,13 +121,23 @@
     </div>
 
     <div class="tabs" id="tabs">
+      <button data-tab="dashboard">Dashboard</button>
       <button class="active" data-tab="registrations">Registrations</button>
-      <button data-tab="verification">Payment Verification</button>
       <button data-tab="payments">Payments</button>
+      <button data-tab="confirmed">Confirmed Members</button>
+      <button data-tab="invoices">Invoices</button>
+      <button data-tab="passes">Entry Passes</button>
+      <button data-tab="scanner">QR Scanner</button>
+      <button data-tab="checkins">Check-in Log</button>
+      <button data-tab="reports">Reports</button>
+      <button data-tab="emails">Email Logs</button>
+      <button data-tab="settings">Settings</button>
+      <button data-tab="verification">Payment Verification</button>
       <button data-tab="gateways">Gateways</button>
       <button data-tab="scanners">Scanners</button>
-      <button data-tab="scanner">Entry Scanner</button>
     </div>
+
+    <section class="panel" id="dashboard"><div class="stats"><div class="card stat"><h3>Registrations</h3><b id="dashRegistrations">0</b></div><div class="card stat"><h3>Confirmed Members</h3><b id="dashConfirmed">0</b></div><div class="card stat"><h3>Checked In</h3><b id="dashCheckins">0</b></div><div class="card stat"><h3>Email Logs</h3><b id="dashEmails">0</b></div></div></section>
 
     <section class="panel active" id="registrations">
       <div class="card">
@@ -208,6 +218,14 @@
       </div>
     </section>
 
+    <section class="panel" id="confirmed"><div class="card"><h2>Confirmed Members</h2><div style="overflow:auto"><table><thead><tr><th>Member</th><th>Email</th><th>Package</th><th>Amount</th></tr></thead><tbody id="confirmedBody"></tbody></table></div></div></section>
+    <section class="panel" id="invoices"><div class="card"><h2>Invoices</h2><p style="color:var(--muted)">Download invoices from the registration payment records after confirmation.</p></div></section>
+    <section class="panel" id="passes"><div class="card"><h2>Entry Passes</h2><p style="color:var(--muted)">Every confirmed member receives one sequential pass and one unique QR token.</p></div></section>
+    <section class="panel" id="checkins"><div class="card"><h2>Check-in Log</h2><p style="color:var(--muted)">Export the complete server-side log for Excel.</p><button class="action primary" id="checkinExport" type="button">Export CSV</button></div></section>
+    <section class="panel" id="reports"><div class="card"><h2>Reports</h2><p style="color:var(--muted)">Use the registration and check-in exports for operational reporting.</p></div></section>
+    <section class="panel" id="emails"><div class="card"><h2>Email Logs</h2><p style="color:var(--muted)">Confirmation and resend attempts are stored with recipient, timestamp and delivery status.</p></div></section>
+    <section class="panel" id="settings"><div class="card"><h2>Settings</h2><p style="color:var(--muted)">Gateway and SMTP secrets are server environment variables and are never exposed in this panel.</p></div></section>
+
     <section class="panel" id="verification">
       <div class="card">
         <div class="toolbar">
@@ -280,7 +298,8 @@
         <h2>Event Entry Scanner</h2>
         <p style="color:var(--muted);margin-bottom:20px;">Scan a delegate QR or type the ticket code (RN5-XXXX-XXXX).</p>
         <div id="scanCam" class="scanner-box">
-          <div class="cam">Camera preview (use live app for device camera)</div>
+          <div id="qr-reader" class="cam">Camera preview</div>
+          <button class="action primary" id="startCamera" type="button">Start Camera Scanner</button>
           <p style="color:var(--primary);font-weight:700;margin-bottom:16px;">Manual Entry</p>
           <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
             <input id="manualCode" placeholder="RN5-XXXX-XXXX" style="text-transform:uppercase;" />
@@ -309,16 +328,26 @@
     </div>
   </div>
 
+  <script src="https://unpkg.com/html5-qrcode" defer></script>
   <script>
-    let regs = [
-      { id: 1, name: 'Aarav Patel', email: 'aarav@example.com', category: 'Delegate', ticket: 'RN5-0012-0001', status: 'paid', amount: 1500, ref: 'UPI-001', checked: 'Hall A', provider: 'GPay', utr: 'UTR-22A' },
-      { id: 2, name: 'Nisha Shah', email: 'nisha@example.com', category: 'Guest', ticket: 'RN5-0012-0002', status: 'pending', amount: 1200, ref: 'UPI-002', checked: '', provider: 'PhonePe', utr: 'UTR-22B' },
-      { id: 3, name: 'Rohan Mehta', email: 'rohan@example.com', category: 'VIP', ticket: 'RN5-0012-0003', status: 'verified', amount: 2500, ref: 'UPI-003', checked: 'VIP Lounge', provider: 'Razorpay', utr: 'UTR-22C' }
-    ];
+    let regs = [];
     let scanners = [
       { email: 'scanner1@bnikutch.com', last: '10 mins ago', created: '2026-08-22' },
       { email: 'scanner2@bnikutch.com', last: '1 day ago', created: '2026-08-15' }
     ];
+    const api = (url, options = {}) => fetch(url, { ...options, headers: { ...(options.headers || {}), Authorization: `Bearer ${localStorage.getItem('ranniti_admin_token') || ''}`, 'Content-Type': 'application/json' } }).then(async (response) => { const body = await response.json(); if (!response.ok) throw new Error(body.message || body.result || 'Request failed'); return body; });
+    async function loadRegistrations() {
+      const body = await api('/api/admin/registrations');
+      regs = body.registrations.map((r) => ({ ...r, id: r.registrationId, name: r.full_name, ticket: r.entryPassNumber || '-', status: r.paymentStatus || 'Pending', ref: r.transactionId, utr: r.transactionId, category: r.package, provider: r.gateway }));
+      renderRegs();
+      renderPayments();
+      const overview = await api('/api/admin/overview');
+      document.getElementById('dashRegistrations').textContent = regs.length;
+      document.getElementById('dashConfirmed').textContent = overview.confirmed.length;
+      document.getElementById('dashCheckins').textContent = overview.checkins.length;
+      document.getElementById('dashEmails').textContent = overview.emailLogs.length;
+      document.getElementById('confirmedBody').innerHTML = overview.confirmed.map((member) => `<tr><td>${member.full_name}</td><td>${member.email}</td><td>${member.package_name}</td><td>₹${inr(member.amount)}</td></tr>`).join('') || '<tr><td colspan="4">No confirmed members.</td></tr>';
+    }
 
     const inr = (n) => Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
     const totalWithGst = (baseAmount) => Math.round(Number(baseAmount || 0) * 1.18 * 100) / 100;
@@ -373,7 +402,7 @@
           <td>${r.provider || '-'}<div class="mono">${r.utr || '-'}</div></td>
           <td>-</td>
           <td><span class="pill ${r.status === 'paid' ? 'paid' : 'pending'}">${r.status.replaceAll('_', ' ')}</span></td>
-          <td>${r.status === 'pending' ? `<button class="action primary" data-approve="${r.id}">Verify</button>` : '-'}</td>
+          <td>${['Received', 'Pending', 'received', 'pending'].includes(r.status) ? `<button class="action primary" data-approve="${r.id}">CONFIRM PAYMENT</button>` : `<button class="action" data-resend="${r.id}">Resend Email</button>`}</td>
         </tr>
       `).join('') || `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:40px;">No payment submissions found.</td></tr>`;
     }
@@ -388,6 +417,21 @@
     document.getElementById('search').addEventListener('input', (e) => renderRegs(e.target.value));
     document.getElementById('paymentSearch').addEventListener('input', renderPayments);
     document.getElementById('paymentFilter').addEventListener('change', renderPayments);
+    document.getElementById('checkinExport').onclick = async () => {
+      const response = await fetch('/api/admin/checkins.csv', { headers: { Authorization: `Bearer ${localStorage.getItem('ranniti_admin_token') || ''}` } });
+      if (!response.ok) { alert('Unable to export check-in log.'); return; }
+      const blob = await response.blob();
+      const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'ranniti5-check-in-log.csv'; link.click(); URL.revokeObjectURL(link.href);
+    };
+    document.getElementById('paymentBody').addEventListener('click', async (event) => {
+      const id = event.target.dataset.approve || event.target.dataset.resend;
+      if (!id) return;
+      try {
+        await api(`/api/admin/payments/${encodeURIComponent(id)}/${event.target.dataset.approve ? 'confirm' : 'resend'}`, { method: 'POST', body: '{}' });
+        await loadRegistrations();
+        alert(event.target.dataset.approve ? 'Payment confirmed. Documents and email created.' : 'Confirmation email resent.');
+      } catch (error) { alert(error.message); }
+    });
 
     let editId = null;
 
@@ -456,33 +500,23 @@
 
     function showScan(code) {
       const target = String(code || '').toUpperCase().trim();
-      const r = regs.find(x => String(x.ticket || '').toUpperCase().trim() === target);
       const box = document.getElementById('scanResult');
       document.getElementById('scanCam').classList.add('hidden');
       box.classList.remove('hidden');
-
-      if (!r) {
-        box.innerHTML = `<p style="color:#f87171;">Ticket not found.</p><button class="action" id="backScan">Back to scanner</button>`;
-        document.getElementById('backScan').onclick = resetScan;
-        return;
-      }
-
-      box.innerHTML = `
-        <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
-          <div>
-            <h2 style="font-size:28px;">${r.name}</h2>
-            <p style="color:var(--muted)">${r.email}</p>
-            <span class="pill ${r.status === 'paid' ? 'paid' : 'pending'}">${r.status}</span>
-            <span class="pill pending" style="margin-left:6px;">${r.category}</span>
-          </div>
-          ${r.status !== 'paid' ? `<p style="color:#f87171;">Payment confirmation required for entry</p>` : ''}
-        </div>
-        <div class="row"><button class="action" id="backScan">Close details</button></div>
-      `;
-      document.getElementById('backScan').onclick = resetScan;
+      api('/api/admin/checkins', { method: 'POST', body: JSON.stringify({ code: target, method: 'manual' }) }).then((body) => {
+        box.innerHTML = `<div class="card ok"><h2 style="color:var(--green)">✓ ${body.result}</h2><p>${body.member.full_name}</p><p>${new Date(body.checkin.checked_at).toLocaleString('en-IN')}</p></div><button class="action" id="backScan">Back to scanner</button>`;
+      }).catch((error) => {
+        box.innerHTML = `<div class="card"><h2 style="color:#f87171">⚠ ${error.message}</h2></div><button class="action" id="backScan">Back to scanner</button>`;
+      });
+      box.onclick = (event) => { if (event.target.id === 'backScan') resetScan(); };
     }
 
     document.getElementById('verifyBtn').onclick = () => showScan(document.getElementById('manualCode').value);
+    document.getElementById('startCamera').onclick = async () => {
+      if (!window.Html5Qrcode) { alert('Camera scanner library is still loading.'); return; }
+      const scanner = new Html5Qrcode('qr-reader');
+      await scanner.start({ facingMode: 'environment' }, { fps: 10, qrbox: 220 }, async (decodedText) => { await scanner.stop(); showScan(decodedText); }, () => {});
+    };
 
     document.getElementById('registrationForm').onsubmit = (e) => {
       e.preventDefault();
@@ -502,16 +536,20 @@
       renderPayments();
     };
 
-    document.getElementById('adminLoginForm').addEventListener('submit', (e) => {
+    document.getElementById('adminLoginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const email = document.getElementById('adminEmail').value.trim();
       const password = document.getElementById('adminPassword').value;
-
-      if (email && password) {
+      try {
+        const response = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) });
+        const body = await response.json();
+        if (!response.ok || body.user?.role !== 'admin') throw new Error('Admin access required.');
+        localStorage.setItem('ranniti_admin_token', body.token);
         document.getElementById('adminLogin').classList.add('hidden');
         document.getElementById('adminMain').classList.remove('hidden');
-      } else {
-        document.getElementById('loginMessage').textContent = 'Please enter valid admin credentials.';
+        await loadRegistrations();
+      } catch (error) {
+        document.getElementById('loginMessage').textContent = error.message;
       }
     });
 
@@ -519,8 +557,6 @@
       document.getElementById('totalAmount').textContent = '₹' + inr(totalWithGst(e.target.value));
     });
 
-    renderRegs();
-    renderPayments();
     renderScanners();
   </script>
 </body>

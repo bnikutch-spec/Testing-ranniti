@@ -39,6 +39,39 @@ const initializeDatabase = () => {
     db.run(`
       INSERT OR IGNORE INTO admin_settings (id, default_role) VALUES (1, 'user')
     `);
+
+    db.run(`CREATE TABLE IF NOT EXISTS registrations (
+      id TEXT PRIMARY KEY, full_name TEXT NOT NULL, email TEXT NOT NULL, mobile TEXT,
+      company TEXT, guest_name TEXT, region TEXT, chapter TEXT, gst_number TEXT, city TEXT,
+      date_of_birth TEXT, hoodie_size TEXT, business_intent TEXT, package_name TEXT NOT NULL,
+      amount REAL NOT NULL, status TEXT NOT NULL DEFAULT 'Pending', created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+    )`);
+    db.run(`CREATE TABLE IF NOT EXISTS payments (
+      id TEXT PRIMARY KEY, registration_id TEXT NOT NULL UNIQUE, transaction_id TEXT,
+      amount REAL NOT NULL, status TEXT NOT NULL DEFAULT 'Pending', gateway TEXT NOT NULL DEFAULT 'manual',
+      gateway_order_id TEXT, payment_date TEXT, proof_path TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      FOREIGN KEY (registration_id) REFERENCES registrations(id)
+    )`);
+    db.run(`CREATE TABLE IF NOT EXISTS invoices (
+      id TEXT PRIMARY KEY, registration_id TEXT NOT NULL UNIQUE, invoice_number TEXT NOT NULL UNIQUE,
+      file_path TEXT NOT NULL, created_at TEXT NOT NULL, FOREIGN KEY (registration_id) REFERENCES registrations(id)
+    )`);
+    db.run(`CREATE TABLE IF NOT EXISTS entry_passes (
+      id TEXT PRIMARY KEY, registration_id TEXT NOT NULL UNIQUE, pass_number TEXT NOT NULL UNIQUE,
+      qr_token TEXT NOT NULL UNIQUE, file_path TEXT NOT NULL, created_at TEXT NOT NULL,
+      FOREIGN KEY (registration_id) REFERENCES registrations(id)
+    )`);
+    db.run(`CREATE TABLE IF NOT EXISTS checkins (
+      id TEXT PRIMARY KEY, entry_pass_number TEXT NOT NULL, registration_id TEXT NOT NULL,
+      member_name TEXT NOT NULL, checked_at TEXT NOT NULL, method TEXT NOT NULL, checked_by TEXT NOT NULL,
+      FOREIGN KEY (registration_id) REFERENCES registrations(id)
+    )`);
+    db.run(`CREATE TABLE IF NOT EXISTS email_logs (
+      id TEXT PRIMARY KEY, registration_id TEXT NOT NULL, recipient TEXT NOT NULL, subject TEXT NOT NULL,
+      status TEXT NOT NULL, sent_at TEXT NOT NULL, error TEXT, FOREIGN KEY (registration_id) REFERENCES registrations(id)
+    )`);
+    db.run(`CREATE TABLE IF NOT EXISTS sequences (name TEXT PRIMARY KEY, value INTEGER NOT NULL DEFAULT 0)`);
+    db.run(`INSERT OR IGNORE INTO sequences (name, value) VALUES ('invoice', 0), ('entry_pass', 0)`);
   });
 };
 

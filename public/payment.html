@@ -68,7 +68,16 @@
       document.getElementById('packageName').textContent = packageName;
       document.getElementById('paymentAmount').textContent = '₹' + amount;
       document.getElementById('paymentQr').src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(`upi://pay?pa=munjalshah9@okicici&pn=Imperial%20Innoventures&am=${amount.replace(',', '')}&cu=INR`);
-      document.getElementById('paymentForm').addEventListener('submit', (event) => { event.preventDefault(); window.location.href = '/confirmation'; });
+      document.getElementById('paymentForm').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const registrationId = new URLSearchParams(window.location.search).get('registrationId');
+        const transactionId = document.getElementById('utrId').value.trim();
+        const response = await fetch('/api/payments/manual', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ registrationId, transactionId }) });
+        const body = await response.json();
+        if (!response.ok) { document.getElementById('paymentSuccess').textContent = body.message || 'Payment submission failed'; return; }
+        document.getElementById('paymentSuccess').style.display = 'block';
+        window.setTimeout(() => { window.location.href = '/confirmation?registrationId=' + encodeURIComponent(registrationId); }, 600);
+      });
     </script>
   </body>
 </html>

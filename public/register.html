@@ -203,7 +203,11 @@
       packageSelect.addEventListener('change', updateSummary);
       document.getElementById('registrationForm').addEventListener('submit', (event) => {
         event.preventDefault();
-        window.location.href = '/payment?package=' + encodeURIComponent(packageSelect.value);
+        const data = Object.fromEntries(new FormData(event.currentTarget).entries());
+        fetch('/api/registrations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+          .then((response) => response.json().then((body) => ({ response, body })))
+          .then(({ response, body }) => { if (!response.ok) throw new Error(body.message || 'Unable to create registration'); window.location.href = '/payment?registrationId=' + encodeURIComponent(body.registration.id) + '&package=' + encodeURIComponent(packageSelect.value); })
+          .catch((error) => { document.getElementById('formSuccess').textContent = error.message; document.getElementById('formSuccess').style.display = 'block'; });
       });
       document.getElementById('paymentForm').addEventListener('submit', (event) => {
         event.preventDefault();

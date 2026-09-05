@@ -1,3 +1,17 @@
+## Payment and entry workflow
+
+The application now stores registrations, payments, invoices, entry passes, email logs, and check-ins in SQLite. The public registration and payment forms call the API; admins authenticate through JWT and confirm payments from `/admin`.
+
+Copy `.env.example` to `.env` and set `RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET` for Razorpay orders. Set the SMTP variables for real confirmation email delivery. Until Razorpay keys are configured, the existing UPI/UTR form records a payment as `Received` for admin review.
+
+Run locally:
+
+```bash
+npm install
+npm start
+```
+
+The admin account must be created through `/api/auth/register` with an email ending in `@admin.com`, then used at `/admin`. Confirmation creates sequential `RN5-INV-001` invoices and `RN5-001` entry passes, stores a unique QR token, sends both PDFs, and makes QR/manual check-in idempotent.
 # Ranniti Backend
 
 A lightweight Express backend with JWT authentication and file-based user storage.

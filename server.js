@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import authRoutes from './src/routes/auth.js';
 import userRoutes from './src/routes/users.js';
+import registrationRoutes from './src/routes/registrations.js';
 
 dotenv.config();
 
@@ -66,6 +67,7 @@ app.get('/api/health', (req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api', registrationRoutes);
 
 app.use((req, res) => {
   res.status(404).json({
