@@ -2,7 +2,7 @@
 
 The application stores registrations, payments, invoices, entry passes, email logs, and check-ins in MongoDB. Admins authenticate through JWT and confirm payments from `/admin`.
 
-Copy `.env.example` to `.env` and configure `MONGODB_URI` and `MONGODB_DB`. Set `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` for real Razorpay checkout orders. Set `RESEND_API_KEY` and `RESEND_FROM_EMAIL` for password reset emails, and set `BREVO_API_KEY`, `BREVO_SENDER_NAME`, and `BREVO_SENDER_EMAIL` for real confirmation email delivery. Manual UPI/UTR submissions are stored as `Received` for admin review.
+Copy `.env.example` to `.env` and configure `MONGODB_URI` and `MONGODB_DB`. Set `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` for real Razorpay checkout orders. Set `BREVO_API_KEY`, `BREVO_SENDER_NAME`, and `BREVO_SENDER_EMAIL` for password reset and confirmation email delivery. Resend variables remain supported as a fallback for password reset emails. Manual UPI/UTR submissions are stored as `Received` for admin review.
 
 Run locally:
 
@@ -40,11 +40,14 @@ Upload or connect the project root (the folder containing `package.json`) to Ver
 
 Vercel uses the included `vercel.json`. No build command is required; the project runs through `server.js`.
 
-For password reset emails, add these Resend Environment Variables in the Vercel
+For password reset emails, add these Brevo Environment Variables in the Vercel
 project settings for the Production environment, then redeploy:
-`RESEND_API_KEY` (a private Resend API key), `RESEND_FROM_EMAIL` (for example
-`RANNITI 5 <no-reply@bnikutch.com>`), and `APP_URL` (the deployed site URL,
-without a trailing slash).
+`BREVO_RESET_PASSWORD_API_KEY` (a private Brevo v3 API key),
+`BREVO_RESET_PASSWORD_SENDER_NAME`, `BREVO_RESET_PASSWORD_SENDER_EMAIL`, and
+`APP_URL` (the deployed site URL, without a trailing slash). The shared
+`BREVO_API_KEY`, `BREVO_SENDER_NAME`, and `BREVO_SENDER_EMAIL` remain supported
+as fallbacks and are used for confirmation emails. Resend can be used instead
+by setting `RESEND_API_KEY` and `RESEND_FROM_EMAIL`.
 
 Keep the Brevo variables configured as well if confirmation emails are enabled.
 

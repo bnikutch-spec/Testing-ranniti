@@ -28,10 +28,6 @@ app.get('/admin', (req, res) => {
   res.sendFile(path.join(projectRoot, 'Admin5.html'));
 });
 
-app.get('/auth', (req, res) => {
-  res.sendFile(path.join(projectRoot, 'Admin5.html'));
-});
-
 app.get('/register', (req, res) => {
   res.sendFile(path.join(publicRoot, 'register.html'));
 });

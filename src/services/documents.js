@@ -193,20 +193,31 @@ export const sendConfirmationEmail = async (registration, artifacts) => {
 
 export const sendPasswordResetEmail = async (user, token, appUrl) => {
   const subject = 'RANNITI 5 | Reset your password';
-  if (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL) throw new Error('Resend is not configured. Set RESEND_API_KEY and RESEND_FROM_EMAIL.');
   const resetUrl = `${appUrl.replace(/\/$/, '')}/reset-password?token=${encodeURIComponent(token)}`;
+  const text = `Reset your RANNITI 5 password using this link. It expires in 30 minutes: ${resetUrl}`;
+  const resetBrevoApiKey = process.env.BREVO_RESET_PASSWORD_API_KEY || process.env['BREVO_RESET-PASSWORD_API_KEY'] || process.env.BREVO_API_KEY;
+  const resetBrevoSenderEmail = process.env.BREVO_RESET_PASSWORD_SENDER_EMAIL || process.env['BREVO_RESET-PASSWORD_SENDER_EMAIL'] || process.env.BREVO_SENDER_EMAIL;
+  const resetBrevoSenderName = process.env.BREVO_RESET_PASSWORD_SENDER_NAME || process.env['BREVO_RESET-PASSWORD_SENDER_NAME'] || process.env.BREVO_SENDER_NAME;
+  if (resetBrevoApiKey && resetBrevoSenderEmail) {
+    if (resetBrevoApiKey.startsWith('xsmtpsib-')) throw new Error('Brevo SMTP credentials cannot be used with the HTTP API. Set a Brevo v3 API key beginning with xkeysib-.');
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: { accept: 'application/json', 'api-key': resetBrevoApiKey, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        sender: { name: resetBrevoSenderName || 'RANNITI 5', email: resetBrevoSenderEmail },
+        to: [{ email: user.email, name: user.name }],
+        subject,
+        textContent: text,
+      }),
+    });
+    if (!response.ok) throw new Error(`Brevo rejected password reset email: ${await response.text()}`);
+    return;
+  }
+  if (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL) throw new Error('Email is not configured. Set a Brevo reset-password API key and sender email, or RESEND_API_KEY and RESEND_FROM_EMAIL.');
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: process.env.RESEND_FROM_EMAIL,
-      to: [user.email],
-      subject,
-      text: `Reset your RANNITI 5 password using this link. It expires in 30 minutes: ${resetUrl}`,
-    }),
+    headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: process.env.RESEND_FROM_EMAIL, to: [user.email], subject, text }),
   });
   if (!response.ok) throw new Error(`Resend rejected password reset email: ${await response.text()}`);
 };
