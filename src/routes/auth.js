@@ -81,7 +81,10 @@ router.post('/forgot-password', async (req, res) => {
   const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
   await users.updateOne({ _id: user._id }, { $set: { reset_token_hash: tokenHash, reset_token_expires_at: expiresAt } });
   try {
-    await sendPasswordResetEmail(user, token, req.get('origin') || process.env.APP_URL || `http://localhost:${process.env.PORT || 5000}`);
+    const forwardedProto = String(req.get('x-forwarded-proto') || 'https').split(',')[0];
+    const forwardedHost = req.get('x-forwarded-host') || req.get('host');
+    const requestUrl = forwardedHost ? `${forwardedProto}://${forwardedHost}` : '';
+    await sendPasswordResetEmail(user, token, process.env.APP_URL || req.get('origin') || requestUrl || `http://localhost:${process.env.PORT || 5000}`);
   } catch (error) {
     await users.updateOne({ _id: user._id }, { $unset: { reset_token_hash: '', reset_token_expires_at: '' } });
     return res.status(502).json({ success: false, message: error.message });

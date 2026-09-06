@@ -40,6 +40,12 @@ Upload or connect the project root (the folder containing `package.json`) to Ver
 
 Vercel uses the included `vercel.json`. No build command is required; the project runs through `server.js`.
 
+For password reset and confirmation emails, add these Environment Variables in
+the Vercel project settings for the Production environment, then redeploy:
+`BREVO_API_KEY` (a Brevo v3 API key beginning with `xkeysib-`),
+`BREVO_SENDER_EMAIL` (a verified Brevo sender), `BREVO_SENDER_NAME`, and
+`APP_URL` (the deployed site URL, without a trailing slash).
+
 ### Netlify
 
 Netlify uses the included `netlify.toml` and `netlify/functions/server.js`. No publish directory is required.
