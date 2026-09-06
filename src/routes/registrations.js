@@ -1,4 +1,5 @@
 import express from 'express';
+import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { collection } from '../config/database.js';
@@ -12,11 +13,33 @@ const publicRegistration = (r) => ({ ...r, registrationId: r.id, package: r.pack
 router.post('/registrations', async (req, res) => {
   const body = req.body || {};
   const amount = packages[body.package] || Number(body.amount);
-  if (!body.fullName || !body.email || !body.package || !amount) return res.status(400).json({ success: false, message: 'Name, email, package and amount are required' });
+  if (!body.fullName || !body.email || !body.password || body.password.length < 8 || !body.package || !amount) return res.status(400).json({ success: false, message: 'Name, email, password (8+ characters), package and amount are required' });
   const id = `RN5-REG-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
   const now = new Date().toISOString();
   await (await collection('registrations')).insertOne({ id, full_name: body.fullName.trim(), email: body.email.trim().toLowerCase(), mobile: body.mobile || '', company: body.company || '', guest_name: body.guestName || '', region: body.region || '', chapter: body.chapter || '', gst_number: body.gstNumber || '', city: body.city || '', date_of_birth: body.dateOfBirth || '', hoodie_size: body.hoodieSize || '', business_intent: body.businessIntent || '', package_name: body.package, amount, status: 'Pending', created_at: now, updated_at: now });
+  const users = await collection('users');
+  const email = body.email.trim().toLowerCase();
+  if (!await users.findOne({ email })) await users.insertOne({ id: uuidv4(), name: body.fullName.trim(), email, password_hash: await bcrypt.hash(body.password, 12), role: 'user', created_at: now, updated_at: now });
   return res.status(201).json({ success: true, registration: { id, amount, package: body.package } });
+});
+
+router.get('/member/dashboard', authMiddleware, async (req, res) => {
+  const registrations = await (await collection('registrations')).find({ email: req.user.email }).sort({ created_at: -1 }).toArray();
+  const ids = registrations.map((registration) => registration.id);
+  const [payments, invoices, passes, checkins] = await Promise.all([ (await collection('payments')).find({ registration_id: { $in: ids } }).toArray(), (await collection('invoices')).find({ registration_id: { $in: ids } }).toArray(), (await collection('entry_passes')).find({ registration_id: { $in: ids } }).toArray(), (await collection('checkins')).find({ registration_id: { $in: ids } }).toArray() ]);
+  const by = (rows) => new Map(rows.map((row) => [row.registration_id, row]));
+  const paymentBy = by(payments); const invoiceBy = by(invoices); const passBy = by(passes); const checkinBy = by(checkins);
+  return res.json({ success: true, member: { name: req.user.name, email: req.user.email }, registrations: registrations.map((registration) => ({ ...registration, password_hash: undefined, payment: paymentBy.get(registration.id) || null, invoice: invoiceBy.get(registration.id) || null, entryPass: passBy.get(registration.id) || null, checkin: checkinBy.get(registration.id) || null })) });
+});
+
+router.get('/member/documents/:type/:id', authMiddleware, async (req, res) => {
+  const registration = await (await collection('registrations')).findOne({ id: req.params.id, email: req.user.email });
+  if (!registration) return res.status(404).json({ success: false, message: 'Registration not found' });
+  const table = req.params.type === 'invoice' ? 'invoices' : req.params.type === 'entry-pass' ? 'entry_passes' : null;
+  if (!table) return res.status(400).json({ success: false, message: 'Invalid document type' });
+  const document = await (await collection(table)).findOne({ registration_id: registration.id });
+  if (!document) return res.status(404).json({ success: false, message: 'Document not available until payment is confirmed' });
+  return res.download(document.file_path);
 });
 
 router.post('/payments/manual', async (req, res) => {

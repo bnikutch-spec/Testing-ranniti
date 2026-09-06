@@ -44,6 +44,18 @@ app.get('/confirmation', (req, res) => {
   res.sendFile(path.join(publicRoot, 'confirmation.html'));
 });
 
+app.get('/login', (req, res) => {
+  res.sendFile(path.join(publicRoot, 'login.html'));
+});
+
+app.get('/reset-password', (req, res) => {
+  res.sendFile(path.join(publicRoot, 'reset-password.html'));
+});
+
+app.get('/member', (req, res) => {
+  res.sendFile(path.join(publicRoot, 'member.html'));
+});
+
 app.get('/Admin5.html', (req, res) => {
   res.sendFile(path.join(projectRoot, 'Admin5.html'));
 });

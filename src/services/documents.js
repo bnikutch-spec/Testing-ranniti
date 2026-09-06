@@ -190,3 +190,21 @@ export const sendConfirmationEmail = async (registration, artifacts) => {
     throw error;
   }
 };
+
+export const sendPasswordResetEmail = async (user, token, appUrl) => {
+  const subject = 'RANNITI 5 | Reset your password';
+  if (!process.env.BREVO_API_KEY || !process.env.BREVO_SENDER_EMAIL) throw new Error('Brevo is not configured. Set BREVO_API_KEY and BREVO_SENDER_EMAIL.');
+  if (process.env.BREVO_API_KEY.startsWith('xsmtpsib-')) throw new Error('Brevo SMTP credentials cannot be used with the HTTP API.');
+  const resetUrl = `${appUrl.replace(/\/$/, '')}/reset-password?token=${encodeURIComponent(token)}`;
+  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: { accept: 'application/json', 'api-key': process.env.BREVO_API_KEY, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      sender: { name: process.env.BREVO_SENDER_NAME || 'RANNITI 5', email: process.env.BREVO_SENDER_EMAIL },
+      to: [{ email: user.email, name: user.name }],
+      subject,
+      textContent: `Reset your RANNITI 5 password using this link. It expires in 30 minutes: ${resetUrl}`,
+    }),
+  });
+  if (!response.ok) throw new Error(`Brevo rejected password reset email: ${await response.text()}`);
+};
