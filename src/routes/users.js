@@ -1,13 +1,11 @@
 import express from 'express';
 import { adminMiddleware, authMiddleware } from '../middleware/authMiddleware.js';
-import { all, get } from '../config/database.js';
+import { collection } from '../config/database.js';
 
 const router = express.Router();
 
 router.get('/', authMiddleware, async (req, res) => {
-  const users = await all(
-    'SELECT id, name, email, role, created_at, updated_at FROM users ORDER BY created_at DESC'
-  );
+  const users = await (await collection('users')).find({}, { projection: { _id: 0, id: 1, name: 1, email: 1, role: 1, created_at: 1, updated_at: 1 } }).sort({ created_at: -1 }).toArray();
 
   return res.json({
     success: true,
@@ -23,7 +21,7 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 router.get('/me', authMiddleware, async (req, res) => {
-  const user = await get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+  const user = await (await collection('users')).findOne({ id: req.user.id });
 
   if (!user) {
     return res.status(404).json({

@@ -2,7 +2,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
-import { get, run } from '../config/database.js';
+import { collection } from '../config/database.js';
 
 const router = express.Router();
 
@@ -32,7 +32,8 @@ router.post('/register', async (req, res) => {
     });
   }
 
-  const existingUser = await get('SELECT id FROM users WHERE email = ?', [normalizedEmail]);
+  const users = await collection('users');
+  const existingUser = await users.findOne({ email: normalizedEmail });
 
   if (existingUser) {
     return res.status(409).json({
@@ -45,12 +46,9 @@ router.post('/register', async (req, res) => {
   const createdAt = new Date().toISOString();
   const userId = uuidv4();
 
-  const role = normalizedEmail.endsWith('@admin.com') ? 'admin' : 'user';
+  const role = process.env.ADMIN_EMAIL && normalizedEmail === process.env.ADMIN_EMAIL.trim().toLowerCase() ? 'admin' : 'user';
 
-  await run(
-    'INSERT INTO users (id, name, email, password_hash, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [userId, normalizedName, normalizedEmail, passwordHash, role, createdAt, createdAt]
-  );
+  await users.insertOne({ id: userId, name: normalizedName, email: normalizedEmail, password_hash: passwordHash, role, created_at: createdAt, updated_at: createdAt });
 
   const user = {
     id: userId,
@@ -80,7 +78,7 @@ router.post('/login', async (req, res) => {
   }
 
   const normalizedEmail = String(email).trim().toLowerCase();
-  const user = await get('SELECT * FROM users WHERE email = ?', [normalizedEmail]);
+  const user = await (await collection('users')).findOne({ email: normalizedEmail });
 
   if (!user) {
     return res.status(401).json({

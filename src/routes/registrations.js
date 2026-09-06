@@ -1,7 +1,7 @@
 import express from 'express';
 import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
-import { all, get, run } from '../config/database.js';
+import { collection } from '../config/database.js';
 import { adminMiddleware, authMiddleware } from '../middleware/authMiddleware.js';
 import { createArtifacts, sendConfirmationEmail } from '../services/documents.js';
 
@@ -15,21 +15,21 @@ router.post('/registrations', async (req, res) => {
   if (!body.fullName || !body.email || !body.package || !amount) return res.status(400).json({ success: false, message: 'Name, email, package and amount are required' });
   const id = `RN5-REG-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
   const now = new Date().toISOString();
-  await run('INSERT INTO registrations (id, full_name, email, mobile, company, guest_name, region, chapter, gst_number, city, date_of_birth, hoodie_size, business_intent, package_name, amount, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [id, body.fullName.trim(), body.email.trim().toLowerCase(), body.mobile || '', body.company || '', body.guestName || '', body.region || '', body.chapter || '', body.gstNumber || '', body.city || '', body.dateOfBirth || '', body.hoodieSize || '', body.businessIntent || '', body.package, amount, now, now]);
+  await (await collection('registrations')).insertOne({ id, full_name: body.fullName.trim(), email: body.email.trim().toLowerCase(), mobile: body.mobile || '', company: body.company || '', guest_name: body.guestName || '', region: body.region || '', chapter: body.chapter || '', gst_number: body.gstNumber || '', city: body.city || '', date_of_birth: body.dateOfBirth || '', hoodie_size: body.hoodieSize || '', business_intent: body.businessIntent || '', package_name: body.package, amount, status: 'Pending', created_at: now, updated_at: now });
   return res.status(201).json({ success: true, registration: { id, amount, package: body.package } });
 });
 
 router.post('/payments/manual', async (req, res) => {
   const { registrationId, transactionId } = req.body || {};
-  const registration = await get('SELECT * FROM registrations WHERE id = ?', [registrationId]);
+  const registration = await (await collection('registrations')).findOne({ id: registrationId });
   if (!registration || !transactionId) return res.status(400).json({ success: false, message: 'Registration ID and transaction ID are required' });
   const now = new Date().toISOString();
-  await run('INSERT OR REPLACE INTO payments (id, registration_id, transaction_id, amount, status, gateway, payment_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [uuidv4(), registrationId, transactionId.trim(), registration.amount, 'Received', 'manual', now, now, now]);
+  await (await collection('payments')).updateOne({ registration_id: registrationId }, { $set: { id: uuidv4(), registration_id: registrationId, transaction_id: transactionId.trim(), amount: registration.amount, status: 'Received', gateway: 'manual', payment_date: now, updated_at: now }, $setOnInsert: { created_at: now } }, { upsert: true });
   return res.json({ success: true, status: 'Received', registrationId });
 });
 
 router.post('/payments/order', async (req, res) => {
-  const registration = await get('SELECT * FROM registrations WHERE id = ?', [req.body?.registrationId]);
+  const registration = await (await collection('registrations')).findOne({ id: req.body?.registrationId });
   if (!registration) return res.status(404).json({ success: false, message: 'Registration not found' });
   if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) return res.status(503).json({ success: false, message: 'Razorpay is not configured. Use manual payment until gateway keys are set.' });
   const auth = Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString('base64');
@@ -37,7 +37,7 @@ router.post('/payments/order', async (req, res) => {
   const order = await response.json();
   if (!response.ok) return res.status(502).json({ success: false, message: order.error?.description || 'Unable to create payment order' });
   const now = new Date().toISOString();
-  await run('INSERT OR REPLACE INTO payments (id, registration_id, amount, status, gateway, gateway_order_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [uuidv4(), registration.id, registration.amount, 'Pending', 'razorpay', order.id, now, now]);
+  await (await collection('payments')).updateOne({ registration_id: registration.id }, { $set: { id: uuidv4(), registration_id: registration.id, amount: registration.amount, status: 'Pending', gateway: 'razorpay', gateway_order_id: order.id, updated_at: now }, $setOnInsert: { created_at: now } }, { upsert: true });
   return res.json({ success: true, keyId: process.env.RAZORPAY_KEY_ID, order, registrationId: registration.id });
 });
 
@@ -46,68 +46,86 @@ router.post('/payments/razorpay/verify', async (req, res) => {
   const expected = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || '').update(`${orderId}|${paymentId}`).digest('hex');
   if (!signature || signature !== expected) return res.status(400).json({ success: false, message: 'Invalid payment signature' });
   const now = new Date().toISOString();
-  await run('UPDATE payments SET transaction_id = ?, status = ?, payment_date = ?, updated_at = ? WHERE registration_id = ? AND gateway_order_id = ?', [paymentId, 'Received', now, now, registrationId, orderId]);
+  const result = await (await collection('payments')).updateOne({ registration_id: registrationId, gateway_order_id: orderId }, { $set: { transaction_id: paymentId, status: 'Received', payment_date: now, updated_at: now } });
+  if (!result.matchedCount) return res.status(404).json({ success: false, message: 'Payment order not found' });
   return res.json({ success: true, status: 'Received' });
 });
 
 router.get('/admin/registrations', authMiddleware, adminMiddleware, async (req, res) => {
-  const rows = await all('SELECT r.*, p.status payment_status, p.transaction_id, p.payment_date, i.invoice_number, e.pass_number FROM registrations r LEFT JOIN payments p ON p.registration_id = r.id LEFT JOIN invoices i ON i.registration_id = r.id LEFT JOIN entry_passes e ON e.registration_id = r.id ORDER BY r.created_at DESC');
-  return res.json({ success: true, registrations: rows.map(publicRegistration) });
+  const registrations = await (await collection('registrations')).find().sort({ created_at: -1 }).toArray();
+  const [payments, invoices, passes] = await Promise.all([(await collection('payments')).find().toArray(), (await collection('invoices')).find().toArray(), (await collection('entry_passes')).find().toArray()]);
+  const by = (rows) => new Map(rows.map((row) => [row.registration_id, row]));
+  const paymentBy = by(payments); const invoiceBy = by(invoices); const passBy = by(passes);
+  return res.json({ success: true, registrations: registrations.map((r) => publicRegistration({ ...r, ...(paymentBy.get(r.id) ? { payment_status: paymentBy.get(r.id).status, transaction_id: paymentBy.get(r.id).transaction_id, payment_date: paymentBy.get(r.id).payment_date } : {}), ...(invoiceBy.get(r.id) ? { invoice_number: invoiceBy.get(r.id).invoice_number } : {}), ...(passBy.get(r.id) ? { pass_number: passBy.get(r.id).pass_number } : {}) })) });
+});
+
+router.patch('/admin/registrations/:registrationId', authMiddleware, adminMiddleware, async (req, res) => {
+  const allowed = ['full_name', 'email', 'mobile', 'company', 'guest_name', 'region', 'chapter', 'gst_number', 'city', 'date_of_birth', 'hoodie_size', 'business_intent', 'package_name'];
+  const updates = Object.fromEntries(Object.entries(req.body || {}).filter(([key, value]) => allowed.includes(key) && value !== undefined));
+  if (!Object.keys(updates).length) return res.status(400).json({ success: false, message: 'No editable fields provided' });
+  if (updates.email) updates.email = String(updates.email).trim().toLowerCase();
+  if (updates.full_name) updates.full_name = String(updates.full_name).trim();
+  updates.updated_at = new Date().toISOString();
+  const result = await (await collection('registrations')).updateOne({ id: req.params.registrationId }, { $set: updates });
+  if (!result.matchedCount) return res.status(404).json({ success: false, message: 'Registration not found' });
+  return res.json({ success: true, registrationId: req.params.registrationId });
 });
 
 router.get('/admin/overview', authMiddleware, adminMiddleware, async (req, res) => {
-  const [confirmed, invoices, passes, checkins, emailLogs] = await Promise.all([
-    all("SELECT id, full_name, email, package_name, amount FROM registrations WHERE status = 'Confirmed' ORDER BY updated_at DESC"),
-    all('SELECT invoice_number, registration_id, created_at FROM invoices ORDER BY created_at DESC'),
-    all('SELECT pass_number, registration_id, created_at FROM entry_passes ORDER BY created_at DESC'),
-    all('SELECT entry_pass_number, registration_id, member_name, checked_at, method, checked_by FROM checkins ORDER BY checked_at DESC'),
-    all('SELECT registration_id, recipient, status, sent_at, error FROM email_logs ORDER BY sent_at DESC'),
-  ]);
-  return res.json({ success: true, confirmed, invoices, passes, checkins, emailLogs });
+  const [confirmed, payments, invoices, passes, checkins, emailLogs] = await Promise.all([(await collection('registrations')).find({ status: 'Confirmed' }).sort({ updated_at: -1 }).toArray(), (await collection('payments')).find().sort({ updated_at: -1 }).toArray(), (await collection('invoices')).find().sort({ created_at: -1 }).toArray(), (await collection('entry_passes')).find().sort({ created_at: -1 }).toArray(), (await collection('checkins')).find().sort({ checked_at: -1 }).toArray(), (await collection('email_logs')).find().sort({ sent_at: -1 }).toArray()]);
+  return res.json({ success: true, confirmed, payments, invoices, passes, checkins, emailLogs });
 });
 
 router.post('/admin/payments/:registrationId/confirm', authMiddleware, adminMiddleware, async (req, res) => {
-  const registration = await get('SELECT * FROM registrations WHERE id = ?', [req.params.registrationId]);
-  const payment = await get('SELECT * FROM payments WHERE registration_id = ?', [req.params.registrationId]);
+  const registrations = await collection('registrations');
+  const payments = await collection('payments');
+  const registration = await registrations.findOne({ id: req.params.registrationId });
+  const payment = await payments.findOne({ registration_id: req.params.registrationId });
   if (!registration || !payment) return res.status(404).json({ success: false, message: 'Registration or payment not found' });
   if (payment.status === 'Confirmed') return res.json({ success: true, message: 'Payment already confirmed', artifacts: await createArtifacts(registration, payment) });
   const now = new Date().toISOString();
-  await run('UPDATE payments SET status = ?, updated_at = ? WHERE registration_id = ?', ['Confirmed', now, registration.id]);
-  await run('UPDATE registrations SET status = ?, updated_at = ? WHERE id = ?', ['Confirmed', now, registration.id]);
+  await payments.updateOne({ registration_id: registration.id }, { $set: { status: 'Confirmed', updated_at: now, payment_date: payment.payment_date || now } });
+  await registrations.updateOne({ id: registration.id }, { $set: { status: 'Confirmed', updated_at: now } });
   const artifacts = await createArtifacts(registration, { ...payment, status: 'Confirmed' });
-  await sendConfirmationEmail(registration, artifacts);
-  return res.json({ success: true, registrationId: registration.id, artifacts });
+  let email;
+  try { email = await sendConfirmationEmail(registration, artifacts); } catch (error) { return res.status(502).json({ success: false, message: error.message, artifacts }); }
+  return res.json({ success: true, registrationId: registration.id, artifacts, email });
 });
 
 router.post('/admin/payments/:registrationId/resend', authMiddleware, adminMiddleware, async (req, res) => {
-  const registration = await get('SELECT * FROM registrations WHERE id = ?', [req.params.registrationId]);
-  const payment = await get('SELECT * FROM payments WHERE registration_id = ?', [req.params.registrationId]);
+  const registration = await (await collection('registrations')).findOne({ id: req.params.registrationId });
+  const payment = await (await collection('payments')).findOne({ registration_id: req.params.registrationId });
   if (!registration || !payment || payment.status !== 'Confirmed') return res.status(400).json({ success: false, message: 'Payment must be confirmed before sending email' });
-  await sendConfirmationEmail(registration, await createArtifacts(registration, payment));
+  try {
+    await sendConfirmationEmail(registration, await createArtifacts(registration, payment));
+  } catch (error) {
+    return res.status(502).json({ success: false, message: error.message });
+  }
   return res.json({ success: true, message: 'Confirmation email sent' });
 });
 
 router.get('/admin/documents/:type/:id', authMiddleware, adminMiddleware, async (req, res) => {
   const table = req.params.type === 'invoice' ? 'invoices' : 'entry_passes';
-  const row = await get(`SELECT file_path FROM ${table} WHERE registration_id = ? OR id = ?`, [req.params.id, req.params.id]);
+  const row = await (await collection(table)).findOne({ $or: [{ registration_id: req.params.id }, { id: req.params.id }] });
   if (!row) return res.status(404).json({ success: false, message: 'Document not found' });
   return res.download(row.file_path);
 });
 
 router.post('/admin/checkins', authMiddleware, adminMiddleware, async (req, res) => {
   const code = String(req.body.code || '').trim();
-  const pass = await get('SELECT e.*, r.full_name, r.email, r.company, r.status FROM entry_passes e JOIN registrations r ON r.id = e.registration_id WHERE e.pass_number = ? OR e.qr_token = ?', [code, code]);
+  const pass = await (await collection('entry_passes')).aggregate([{ $match: { $or: [{ pass_number: code }, { qr_token: code }] } }, { $lookup: { from: 'registrations', localField: 'registration_id', foreignField: 'id', as: 'registration' } }, { $unwind: '$registration' }]).next();
   if (!pass) return res.status(404).json({ success: false, result: 'INVALID ENTRY PASS' });
-  if (pass.status !== 'Confirmed') return res.status(403).json({ success: false, result: 'PAYMENT NOT CONFIRMED', member: pass.full_name });
-  const existing = await get('SELECT * FROM checkins WHERE registration_id = ?', [pass.registration_id]);
-  if (existing) return res.status(409).json({ success: false, result: 'ALREADY CHECKED IN', checkin: existing, member: pass.full_name });
-  const checkin = { id: uuidv4(), entry_pass_number: pass.pass_number, registration_id: pass.registration_id, member_name: pass.full_name, checked_at: new Date().toISOString(), method: req.body.method === 'manual' ? 'Manual' : 'QR', checked_by: req.user.email };
-  await run('INSERT INTO checkins (id, entry_pass_number, registration_id, member_name, checked_at, method, checked_by) VALUES (?, ?, ?, ?, ?, ?, ?)', Object.values(checkin));
-  return res.json({ success: true, result: 'ENTRY VERIFIED', member: pass, checkin });
+  if (pass.registration.status !== 'Confirmed') return res.status(403).json({ success: false, result: 'PAYMENT NOT CONFIRMED', member: pass.registration.full_name });
+  const checkins = await collection('checkins');
+  const existing = await checkins.findOne({ registration_id: pass.registration_id });
+  if (existing) return res.status(409).json({ success: false, result: 'ALREADY CHECKED IN', checkin: existing, member: pass.registration.full_name });
+  const checkin = { id: uuidv4(), entry_pass_number: pass.pass_number, registration_id: pass.registration_id, member_name: pass.registration.full_name, checked_at: new Date().toISOString(), method: req.body.method === 'manual' ? 'Manual' : 'QR', checked_by: req.user.email };
+  await checkins.insertOne(checkin);
+  return res.json({ success: true, result: 'ENTRY VERIFIED', member: { ...pass.registration, pass_number: pass.pass_number }, checkin });
 });
 
 router.get('/admin/checkins.csv', authMiddleware, adminMiddleware, async (req, res) => {
-  const rows = await all('SELECT entry_pass_number, registration_id, member_name, checked_at, method, checked_by FROM checkins ORDER BY checked_at DESC');
+  const rows = await (await collection('checkins')).find().sort({ checked_at: -1 }).toArray();
   const csv = ['Entry Pass Number,Registration ID,Member,Date,Time,Method,Checked By', ...rows.map((r) => { const date = new Date(r.checked_at); return [r.entry_pass_number, r.registration_id, r.member_name, date.toLocaleDateString('en-IN'), date.toLocaleTimeString('en-IN'), r.method, r.checked_by].map((v) => `"${String(v).replaceAll('"', '""')}"`).join(','); })].join('\n');
   res.type('text/csv').attachment('ranniti5-check-in-log.csv').send(csv);
 });

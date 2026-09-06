@@ -1,19 +1,20 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
+import 'dotenv/config';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import authRoutes from './src/routes/auth.js';
 import userRoutes from './src/routes/users.js';
 import registrationRoutes from './src/routes/registrations.js';
-
-dotenv.config();
+import { initializeDatabase } from './src/config/database.js';
 
 const app = express();
 const port = process.env.PORT || 5000;
 const currentFile = fileURLToPath(import.meta.url);
 const projectRoot = path.dirname(currentFile);
 const publicRoot = path.join(projectRoot, 'public');
+
+await initializeDatabase();
 
 app.use(cors());
 app.use(express.json());
@@ -76,7 +77,7 @@ app.use((req, res) => {
   });
 });
 
-if (process.env.NODE_ENV !== 'production') {
+if (!process.env.VERCEL && !process.env.NETLIFY) {
   app.listen(port, () => {
     console.log(`Server is running on http://localhost:${port}`);
   });

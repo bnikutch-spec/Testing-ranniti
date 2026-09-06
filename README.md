@@ -1,8 +1,8 @@
 ## Payment and entry workflow
 
-The application now stores registrations, payments, invoices, entry passes, email logs, and check-ins in SQLite. The public registration and payment forms call the API; admins authenticate through JWT and confirm payments from `/admin`.
+The application stores registrations, payments, invoices, entry passes, email logs, and check-ins in MongoDB. Admins authenticate through JWT and confirm payments from `/admin`.
 
-Copy `.env.example` to `.env` and set `RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET` for Razorpay orders. Set the SMTP variables for real confirmation email delivery. Until Razorpay keys are configured, the existing UPI/UTR form records a payment as `Received` for admin review.
+Copy `.env.example` to `.env` and configure `MONGODB_URI` and `MONGODB_DB`. Set `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` for real Razorpay checkout orders. Set `BREVO_API_KEY`, `BREVO_SENDER_NAME`, and `BREVO_SENDER_EMAIL` for real confirmation email delivery. Manual UPI/UTR submissions are stored as `Received` for admin review.
 
 Run locally:
 
@@ -11,7 +11,7 @@ npm install
 npm start
 ```
 
-The admin account must be created through `/api/auth/register` with an email ending in `@admin.com`, then used at `/admin`. Confirmation creates sequential `RN5-INV-001` invoices and `RN5-001` entry passes, stores a unique QR token, sends both PDFs, and makes QR/manual check-in idempotent.
+The admin account must be created through `/api/auth/register` using the exact email configured as `ADMIN_EMAIL`, then used at `/admin`. Confirmation creates sequential `RN5-INV-001` invoices and `RN5-001` entry passes using MongoDB atomic counters, stores a unique QR token, sends both PDFs through Brevo, and makes QR/manual check-in idempotent.
 # Ranniti Backend
 
 A lightweight Express backend with JWT authentication and file-based user storage.
@@ -20,10 +20,17 @@ A lightweight Express backend with JWT authentication and file-based user storag
 
 1. Install dependencies:
    npm install
-2. Start the app:
+2. Configure MongoDB:
+   - Copy `.env.example` to `.env`.
+   - For a local MongoDB server, keep `MONGODB_URI=mongodb://127.0.0.1:27017`.
+   - For MongoDB Atlas, set `MONGODB_URI` to the connection string from Atlas and set `MONGODB_DB` to `ranniti5` (or another database name).
+   - In Atlas, add the machine running this app under **Network Access** and create a database user under **Database Access**.
+3. Start the app:
    npm start
-3. For development auto-reload:
+4. For development auto-reload:
    npm run dev
+
+The server connects to MongoDB during startup, creates the required collections' indexes, and then serves the website. A failed connection means the configured MongoDB URI is unreachable or invalid; check `.env`, the Atlas network allowlist, and the database user's credentials.
 
 ## Deploy
 
