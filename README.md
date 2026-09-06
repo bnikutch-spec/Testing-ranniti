@@ -42,7 +42,7 @@ Vercel uses the included `vercel.json`. No build command is required; the projec
 
 For password reset and confirmation emails, add these Environment Variables in
 the Vercel project settings for the Production environment, then redeploy:
-`BREVO_API_KEY` (a Brevo v3 API key beginning with `xkeysib-`),
+`BREVO_API_KEY` (a private Brevo v3 API key beginning with `xkeysib-`),
 `BREVO_SENDER_EMAIL` (a verified Brevo sender), `BREVO_SENDER_NAME`, and
 `APP_URL` (the deployed site URL, without a trailing slash).
 
