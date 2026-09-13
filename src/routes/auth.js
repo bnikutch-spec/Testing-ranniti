@@ -92,7 +92,7 @@ router.post('/forgot-password', async (req, res) => {
   return res.json(genericResponse);
 });
 
-router.post('/reset-password', async (req, res) => {
+router.post('/ -password', async (req, res) => {
   const token = String(req.body?.token || '');
   const password = String(req.body?.password || '');
   if (password.length < 8) return res.status(400).json({ success: false, message: 'Password must be at least 8 characters.' });

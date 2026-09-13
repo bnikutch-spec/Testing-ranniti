@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Register for Ranniti 5.0 Strategy Summit by BNI Kutch." />
-    <title>Register — Ranniti 5.0</title>
+    <meta name="description" content="Register for Ranniti 5 Strategy Summit by BNI Kutch." />
+    <title>Register — Ranniti 5</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -58,9 +58,10 @@
       .field { display: flex; flex-direction: column; gap: 7px; }
       .field.full { grid-column: 1 / -1; }
       label { color: var(--muted); font-size: .85rem; font-weight: 600; }
-      input, select, textarea { width: 100%; padding: 13px 14px; border: 1px solid rgba(255,255,255,.12); border-radius: 10px; outline: 0; background: rgba(0,0,0,.22); color: var(--text); font: inherit; }
+      input, select, textarea { width: 100%; padding: 13px 14px; border: 1px solid rgba(255,255,255,.12); border-radius: 10px; outline: 0; background: rgba(0,0,0,.22); color: var(--text); font: inherit; text-transform: uppercase; }
       textarea { min-height: 110px; resize: vertical; }
       input:focus, select:focus, textarea:focus { border-color: var(--accent-2); box-shadow: 0 0 0 3px rgba(247,165,92,.12); }
+      #gstNumber { text-transform: uppercase; }
       option { background: #211a18; }
       .consents { display: grid; gap: 12px; margin-top: 22px; }
       .consent { display: flex; align-items: flex-start; gap: 10px; color: var(--muted); font-size: .9rem; line-height: 1.45; }
@@ -105,7 +106,7 @@
 
     <main>
       <div class="intro">
-        <span class="kicker">Ranniti 5.0 · 18 December 2026</span>
+        <span class="kicker">Ranniti 5 · 18 December 2026</span>
         <h1>Delegate Registration</h1>
         <p>Complete your details to reserve your place at the Strategy Summit in Dhordo, Kutch.</p>
       </div>
@@ -121,7 +122,7 @@
             <div class="field"><label for="guestName">Guest name</label><input id="guestName" name="guestName" /></div>
             <div class="field"><label for="region">BNI Region</label><input id="region" name="region" required /></div>
             <div class="field"><label for="chapter">BNI Chapter</label><input id="chapter" name="chapter" required /></div>
-            <div class="field"><label for="gstNumber">GST Number <span>(Optional)</span></label><input id="gstNumber" name="gstNumber" /></div>
+            <div class="field"><label for="gstNumber">GST Number <span>(Optional)</span></label><input id="gstNumber" name="gstNumber" style="text-transform: uppercase;" /></div>
             <div class="field"><label for="city">City</label><input id="city" name="city" required autocomplete="address-level2" /></div>
             <div class="field"><label for="dateOfBirth">Date of Birth</label><input id="dateOfBirth" name="dateOfBirth" type="date" required /></div>
             <div class="field"><label for="hoodieSize">Hoodie Size</label><select id="hoodieSize" name="hoodieSize" required><option value="">Select size</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option></select></div>
@@ -203,6 +204,13 @@
       if (packages[queryPackage]) packageSelect.value = queryPackage;
       updateSummary();
       packageSelect.addEventListener('change', updateSummary);
+      const gstNumberInput = document.getElementById('gstNumber');
+      if (gstNumberInput) {
+        gstNumberInput.addEventListener('input', () => {
+          gstNumberInput.value = gstNumberInput.value.toUpperCase();
+        });
+      }
+
       document.getElementById('registrationForm').addEventListener('submit', (event) => {
         event.preventDefault();
         const data = Object.fromEntries(new FormData(event.currentTarget).entries());
