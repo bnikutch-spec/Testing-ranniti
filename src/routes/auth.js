@@ -8,6 +8,8 @@ import { sendPasswordResetEmail } from '../services/documents.js';
 
 const router = express.Router();
 
+const normalizeLoginValue = (value) => String(value ?? '').trim().toLowerCase();
+
 const generateToken = (user) => jwt.sign(
   { id: user.id, email: user.email, name: user.name, role: user.role || 'user' },
   process.env.JWT_SECRET || 'ranniti-dev-secret',
@@ -15,7 +17,7 @@ const generateToken = (user) => jwt.sign(
 );
 
 router.post('/register', async (req, res) => {
-  const { name, email, password } = req.body;
+  const { name, email, password, username } = req.body;
 
   if (!name || !email || !password) {
     return res.status(400).json({
@@ -26,6 +28,7 @@ router.post('/register', async (req, res) => {
 
   const normalizedEmail = String(email).trim().toLowerCase();
   const normalizedName = String(name).trim();
+  const normalizedUsername = normalizeLoginValue(username || normalizedName);
 
   if (!normalizedName || !normalizedEmail || !String(password).trim()) {
     return res.status(400).json({
@@ -35,7 +38,7 @@ router.post('/register', async (req, res) => {
   }
 
   const users = await collection('users');
-  const existingUser = await users.findOne({ email: normalizedEmail });
+  const existingUser = await users.findOne({ $or: [{ email: normalizedEmail }, { username: normalizedUsername }] });
 
   if (existingUser) {
     return res.status(409).json({
@@ -50,7 +53,7 @@ router.post('/register', async (req, res) => {
 
   const role = process.env.ADMIN_EMAIL && normalizedEmail === process.env.ADMIN_EMAIL.trim().toLowerCase() ? 'admin' : 'user';
 
-  await users.insertOne({ id: userId, name: normalizedName, email: normalizedEmail, password_hash: passwordHash, role, created_at: createdAt, updated_at: createdAt });
+  await users.insertOne({ id: userId, name: normalizedName, username: normalizedUsername, email: normalizedEmail, password_hash: passwordHash, role, created_at: createdAt, updated_at: createdAt });
 
   const user = {
     id: userId,
@@ -92,9 +95,9 @@ router.post('/forgot-password', async (req, res) => {
   return res.json(genericResponse);
 });
 
-router.post('/ -password', async (req, res) => {
+router.post('/reset-password', async (req, res) => {
   const token = String(req.body?.token || '');
-  const password = String(req.body?.password || '');
+  const password = String(req.body?.password || '');  
   if (password.length < 8) return res.status(400).json({ success: false, message: 'Password must be at least 8 characters.' });
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
   const users = await collection('users');
@@ -105,17 +108,25 @@ router.post('/ -password', async (req, res) => {
 });
 
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
+  const loginValue = normalizeLoginValue(req.body?.email ?? req.body?.username);
+  const password = String(req.body?.password ?? '');
 
-  if (!email || !password) {
+  if (!loginValue || !password) {
     return res.status(400).json({
       success: false,
-      message: 'Email and password are required',
+      message: 'Email or username and password are required',
     });
   }
 
-  const normalizedEmail = String(email).trim().toLowerCase();
-  const user = await (await collection('users')).findOne({ email: normalizedEmail });
+  const normalizedLogin = normalizeLoginValue(loginValue);
+  const users = await collection('users');
+  const user = await users.findOne({
+    $or: [
+      { email: normalizedLogin },
+      { username: normalizedLogin },
+      { name: { $regex: `^${normalizedLogin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' } },
+    ],
+  });
 
   if (!user) {
     return res.status(401).json({
