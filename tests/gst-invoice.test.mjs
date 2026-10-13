@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { packages, calculatePackagePrice, formatRupees, sellerSettings } from '../public/package-pricing.js';
-import { formatIndianAmountInWords, getInvoiceBreakdown, renderInvoicePdf } from '../src/services/documents.js';
+import { formatEmailAttachments, formatIndianAmountInWords, getInvoiceBreakdown, renderInvoicePdf } from '../src/services/documents.js';
 
 const triple = packages['Triple Occupancy'];
 const priced = calculatePackagePrice(triple);
@@ -27,6 +27,12 @@ assert.equal(invoice.sgstAmount, 1349.91);
 assert.equal(invoice.roundOff, 0);
 assert.equal(invoice.total, 17698.82);
 assert.equal(formatIndianAmountInWords(invoice.total), 'Indian Rupees Seventeen Thousand Six Hundred Ninety Eight and Eighty Two Paise Only');
+const files = [{ filename: 'RN5-INV-TEST.pdf', content: 'invoice-base64' }, { filename: 'RN5-001.pdf', content: 'pass-base64' }];
+assert.deepEqual(formatEmailAttachments(files, 'brevo'), [
+	{ name: 'RN5-INV-TEST.pdf', content: 'invoice-base64' },
+	{ name: 'RN5-001.pdf', content: 'pass-base64' },
+]);
+assert.deepEqual(formatEmailAttachments(files, 'resend'), files);
 
 const pdf = await renderInvoicePdf(registration, { gateway: 'manual', transaction_id: 'TXN-TEST' }, 'RN5-INV-TEST', {
 	name: 'Imperial Innoventures',

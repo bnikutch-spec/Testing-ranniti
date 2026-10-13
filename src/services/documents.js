@@ -214,6 +214,10 @@ export const renderInvoicePdf = (registration, payment, invoiceNumber, seller, i
   doc.font('Helvetica').fontSize(8).text('This is a Computer Generated Invoice', left, taxBottom + 101, { width, align: 'center' });
 });
 
+export const formatEmailAttachments = (attachments, provider) => attachments.map(({ filename, content }) => (
+  provider === 'brevo' ? { name: filename, content } : { filename, content }
+));
+
 export const createArtifacts = async (registration, payment) => {
   const invoices = await collection('invoices');
   const passes = await collection('entry_passes');
@@ -292,6 +296,7 @@ export const sendConfirmationEmail = async (registration, artifacts) => {
   const subject = 'RANNITI 5 – Payment Confirmed | Entry Pass & Invoice';
   const emailLogs = await collection('email_logs');
   const sentAt = new Date().toISOString();
+  const emailText = `Payment confirmed for ${registration.full_name}. GST Tax Invoice ${artifacts.invoice.invoice_number} and entry pass ${artifacts.entryPass.pass_number} are attached. Registration ID: ${registration.id}.`;
   const attachments = await Promise.all([artifacts.invoice.file_path, artifacts.entryPass.file_path].map(async (filePath) => ({
     filename: path.basename(filePath),
     content: (await fs.readFile(filePath)).toString('base64'),
@@ -312,8 +317,8 @@ export const sendConfirmationEmail = async (registration, artifacts) => {
           sender: { name: process.env.BREVO_SENDER_NAME || 'RANNITI 5', email: brevoSenderEmail },
           to: [{ email: registration.email, name: registration.full_name }],
           subject,
-          textContent: `Payment confirmed for ${registration.full_name}. Registration ID: ${registration.id}. Entry Pass: ${artifacts.entryPass.pass_number}.`,
-          attachment: attachments,
+          textContent: emailText,
+          attachment: formatEmailAttachments(attachments, 'brevo'),
         }),
       });
       if (response.ok) {
@@ -332,8 +337,8 @@ export const sendConfirmationEmail = async (registration, artifacts) => {
           from: resendFromEmail,
           to: [registration.email],
           subject,
-          text: `Payment confirmed for ${registration.full_name}. Registration ID: ${registration.id}. Entry Pass: ${artifacts.entryPass.pass_number}.`,
-          attachments,
+          text: emailText,
+          attachments: formatEmailAttachments(attachments, 'resend'),
         }),
       });
       const payload = await response.json().catch(() => ({}));
