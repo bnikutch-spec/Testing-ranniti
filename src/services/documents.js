@@ -5,6 +5,7 @@ import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
 import { v4 as uuidv4 } from 'uuid';
 import { collection, nextSequence } from '../config/database.js';
+import { sellerSettings } from '../../public/package-pricing.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outputDir = path.join(root, 'data', 'generated');
@@ -42,6 +43,8 @@ const writePdf = async (filename, draw) => {
 export const createArtifacts = async (registration, payment) => {
   const invoices = await collection('invoices');
   const passes = await collection('entry_passes');
+  const settings = await (await collection('settings')).findOne({ key: 'seller' }) || {};
+  const seller = { ...sellerSettings, ...(settings || {}) };
   const existing = await invoices.findOne({ registration_id: registration.id });
   const existingPass = existing && await passes.findOne({ registration_id: registration.id });
   const now = new Date().toISOString();
@@ -51,6 +54,10 @@ export const createArtifacts = async (registration, payment) => {
   const logo = await getLogo();
   const eventDate = '18–20 December 2026';
   const eventVenue = 'Dhordo, Kutch';
+  const gstRate = 18;
+  const taxableValue = Number(registration.taxable_amount || registration.amount || 0);
+  const gstValue = Number(registration.gst_amount || (taxableValue * gstRate / 100));
+  const total = Number(registration.amount || taxableValue + gstValue);
   const drawBrand = (doc, title, number) => {
     doc.save().rect(0, 0, 595, 116).fill('#151515').restore();
     if (logo) doc.image(logo, 48, 28, { fit: [128, 54] });
@@ -67,7 +74,7 @@ export const createArtifacts = async (registration, payment) => {
     doc.fillColor('#151515').font('Helvetica').fontSize(11).text(String(value || '—'), x, y + 13, { width });
   };
   const invoicePath = await writePdf(`${invoiceNumber}.pdf`, (doc) => {
-    const amount = `INR ${Number(registration.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+    const amount = `INR ${Number(total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
     const invoiceDate = new Date(now).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' });
     doc.rect(0, 0, 595, 841).fill('#ffffff');
     doc.save().path('M 395 0 L 595 0 L 595 154 L 438 114 Z').fill('#b50813').restore();
@@ -76,40 +83,45 @@ export const createArtifacts = async (registration, payment) => {
     else doc.fillColor('#d71920').font('Helvetica-Bold').fontSize(35).text('RANNITI 5', 48, 55);
     doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9).text('BIGGER NETWORKS', 466, 40, { width: 100, align: 'left' });
     doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9).text('STRONGER BUSINESS', 466, 56, { width: 110, align: 'left' });
-    doc.fillColor('#151c2b').font('Helvetica-Bold').fontSize(31).text('INVOICE', 76, 172);
-    doc.fillColor('#38465c').font('Helvetica').fontSize(11).text('RANNITI 5  ·  EVENT REGISTRATION', 77, 211);
+    doc.fillColor('#151c2b').font('Helvetica-Bold').fontSize(31).text('TAX INVOICE', 76, 172);
+    doc.fillColor('#38465c').font('Helvetica').fontSize(11).text('RANNITI 5 · EVENT REGISTRATION', 77, 211);
     doc.fillColor('#d71920').rect(48, 246, 499, 2).fill();
-    drawField(doc, 'Invoice number', invoiceNumber, 48, 274, 160);
-    doc.fillColor('#d0d5dd').rect(212, 269, 1, 46).fill();
-    drawField(doc, 'Date', invoiceDate, 236, 274, 240);
-    doc.fillColor('#16a05d').roundedRect(454, 270, 93, 31, 16).fill();
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(10).text('✓  PAID', 454, 280, { width: 93, align: 'center' });
-    doc.fillColor('#f4f5f8').roundedRect(48, 344, 499, 112, 7).fill();
-    doc.fillColor('#d71920').circle(83, 400, 24).fill();
-    doc.fillColor('#ffffff').circle(83, 392, 8).fill().roundedRect(72, 402, 22, 14, 7).fill();
-    doc.fillColor('#68758a').font('Helvetica').fontSize(10).text('Billed to', 123, 369);
-    doc.fillColor('#1d2a40').font('Helvetica-Bold').fontSize(15).text(registration.full_name, 123, 389);
-    doc.fillColor('#38465c').font('Helvetica').fontSize(10).text(`✉  ${registration.email}`, 123, 414);
-    doc.text(`☎  ${registration.mobile || '—'}`, 123, 433);
-    drawField(doc, 'Registration ID', registration.id, 48, 488, 235);
-    drawField(doc, 'Transaction ID', payment.transaction_id || 'Manual confirmation', 310, 488, 237);
-    doc.fillColor('#d71920').rect(48, 548, 499, 35).fill();
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(11).text('Package', 64, 560);
-    doc.text('Amount', 445, 560, { width: 85, align: 'right' });
-    doc.fillColor('#f9fafc').rect(48, 583, 499, 58).fill();
-    doc.fillColor('#1d2a40').font('Helvetica').fontSize(10).text(registration.package_name || 'RANNITI 5 event registration', 64, 606, { width: 335 });
-    doc.fillColor('#1d2a40').font('Helvetica-Bold').fontSize(11).text(amount, 400, 606, { width: 116, align: 'right' });
-    doc.fillColor('#fff3f3').roundedRect(48, 662, 499, 77, 7).fill();
-    doc.fillColor('#d71920').circle(83, 700, 21).fill();
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(21).text('₹', 75, 689);
-    doc.fillColor('#68758a').font('Helvetica').fontSize(10).text('Amount paid', 123, 684);
-    doc.fillColor('#d71920').font('Helvetica-Bold').fontSize(21).text(amount, 123, 700);
-    doc.fillColor('#16a05d').roundedRect(403, 681, 113, 36, 18).fill();
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(12).text('✓  PAID', 403, 693, { width: 113, align: 'center' });
-    doc.fillColor('#d71920').font('Helvetica-Oblique').fontSize(22).text('Thank You!', 48, 710);
-    doc.fillColor('#38465c').font('Helvetica').fontSize(9).text('We are excited to have you join RANNITI 5.', 48, 742);
-    doc.text('Your participation makes this journey stronger!', 48, 756);
-    doc.save().rect(0, 775, 595, 66).fill('#151c2b').restore();
+    drawField(doc, 'Invoice number', invoiceNumber, 48, 274, 150);
+    doc.fillColor('#d0d5dd').rect(208, 269, 1, 46).fill();
+    drawField(doc, 'Date', invoiceDate, 228, 274, 180);
+    drawField(doc, 'GSTIN', seller.gstin || '24ADSPV9796P1ZW', 420, 274, 120);
+    doc.fillColor('#16a05d').roundedRect(454, 330, 93, 31, 16).fill();
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(10).text('✓  PAID', 454, 340, { width: 93, align: 'center' });
+    doc.fillColor('#f4f5f8').roundedRect(48, 344, 499, 138, 7).fill();
+    doc.fillColor('#68758a').font('Helvetica').fontSize(9).text('Billed to', 64, 366);
+    doc.fillColor('#1d2a40').font('Helvetica-Bold').fontSize(13).text(registration.full_name, 64, 386);
+    doc.fillColor('#38465c').font('Helvetica').fontSize(9).text(`Email: ${registration.email}`, 64, 410);
+    doc.text(`Phone: ${registration.mobile || '—'}`, 64, 426);
+    doc.text(`GST: ${registration.gst_number || 'Not Provided'}`, 64, 442);
+    doc.fillColor('#68758a').font('Helvetica').fontSize(9).text('Seller', 340, 366);
+    doc.fillColor('#1d2a40').font('Helvetica-Bold').fontSize(12).text(seller.name || 'Imperial Innoventures', 340, 386, { width: 170 });
+    doc.fillColor('#38465c').font('Helvetica').fontSize(9).text(`${seller.address || 'Gandhidham, Kutch, Gujarat'}`, 340, 412, { width: 165 });
+    doc.text(`GSTIN: ${seller.gstin || '24ADSPV9796P1ZW'}`, 340, 440, { width: 165 });
+    doc.fillColor('#d71920').rect(48, 500, 499, 35).fill();
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(11).text('Description', 64, 512);
+    doc.text('Taxable Value', 260, 512, { width: 100, align: 'right' });
+    doc.text('GST @ 18%', 365, 512, { width: 70, align: 'right' });
+    doc.text('Total', 450, 512, { width: 80, align: 'right' });
+    doc.fillColor('#f9fafc').rect(48, 535, 499, 58).fill();
+    doc.fillColor('#1d2a40').font('Helvetica').fontSize(10).text(registration.package_name || 'RANNITI 5 event registration', 64, 558, { width: 185 });
+    doc.fillColor('#1d2a40').font('Helvetica-Bold').fontSize(10).text(`INR ${Number(taxableValue).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, 255, 558, { width: 92, align: 'right' });
+    doc.fillColor('#1d2a40').font('Helvetica-Bold').fontSize(10).text(`INR ${Number(gstValue).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, 350, 558, { width: 88, align: 'right' });
+    doc.fillColor('#1d2a40').font('Helvetica-Bold').fontSize(10).text(`INR ${Number(total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, 432, 558, { width: 90, align: 'right' });
+    doc.fillColor('#fff3f3').roundedRect(48, 618, 499, 86, 7).fill();
+    doc.fillColor('#d71920').circle(83, 665, 21).fill();
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(21).text('₹', 75, 654);
+    doc.fillColor('#68758a').font('Helvetica').fontSize(10).text('Total amount', 123, 650);
+    doc.fillColor('#d71920').font('Helvetica-Bold').fontSize(21).text(amount, 123, 670);
+    doc.fillColor('#1d2a40').font('Helvetica').fontSize(9).text(`Amount in words: ${new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(total)} INR only`, 300, 666, { width: 220 });
+    doc.fillColor('#d71920').font('Helvetica-Oblique').fontSize(20).text('Thank You!', 48, 726);
+    doc.fillColor('#38465c').font('Helvetica').fontSize(9).text('We are excited to have you join RANNITI 5.', 48, 756);
+    doc.text('Your participation makes this journey stronger!', 48, 770);
+    doc.save().rect(0, 780, 595, 61).fill('#151c2b').restore();
   });
   const qrData = await QRCode.toDataURL(qrToken, { margin: 1, width: 220 });
   const entryPassPath = await writePdf(`${passNumber}.pdf`, (doc) => {
@@ -167,26 +179,60 @@ export const sendConfirmationEmail = async (registration, artifacts) => {
   const subject = 'RANNITI 5 – Payment Confirmed | Entry Pass & Invoice';
   const emailLogs = await collection('email_logs');
   const sentAt = new Date().toISOString();
+  const attachments = await Promise.all([artifacts.invoice.file_path, artifacts.entryPass.file_path].map(async (filePath) => ({
+    filename: path.basename(filePath),
+    content: (await fs.readFile(filePath)).toString('base64'),
+  })));
+
   try {
-    if (!process.env.BREVO_API_KEY || !process.env.BREVO_SENDER_EMAIL) throw new Error('Brevo is not configured. Set BREVO_API_KEY and BREVO_SENDER_EMAIL.');
-    if (process.env.BREVO_API_KEY.startsWith('xsmtpsib-')) throw new Error('Brevo SMTP credentials cannot be used with the HTTP API. Set a Brevo v3 API key beginning with xkeysib-.');
-    const attachments = await Promise.all([artifacts.invoice.file_path, artifacts.entryPass.file_path].map(async (filePath) => ({ name: path.basename(filePath), content: (await fs.readFile(filePath)).toString('base64') })));
-    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-      method: 'POST',
-      headers: { accept: 'application/json', 'api-key': process.env.BREVO_API_KEY, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        sender: { name: process.env.BREVO_SENDER_NAME || 'RANNITI 5', email: process.env.BREVO_SENDER_EMAIL },
-        to: [{ email: registration.email, name: registration.full_name }],
-        subject,
-        textContent: `Payment confirmed for ${registration.full_name}. Registration ID: ${registration.id}. Entry Pass: ${artifacts.entryPass.pass_number}.`,
-        attachment: attachments,
-      }),
-    });
-    if (!response.ok) throw new Error(`Brevo rejected email: ${await response.text()}`);
-    await emailLogs.insertOne({ id: uuidv4(), registration_id: registration.id, recipient: registration.email, subject, status: 'Sent', sent_at: sentAt });
-    return { status: 'Sent' };
+    const brevoApiKey = process.env.BREVO_API_KEY;
+    const brevoSenderEmail = process.env.BREVO_SENDER_EMAIL;
+    const resendApiKey = process.env.RESEND_API_KEY;
+    const resendFromEmail = process.env.RESEND_FROM_EMAIL;
+
+    if (brevoApiKey && brevoSenderEmail) {
+      if (brevoApiKey.startsWith('xsmtpsib-')) throw new Error('Brevo SMTP credentials cannot be used with the HTTP API. Set a Brevo v3 API key beginning with xkeysib-.');
+      const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: { accept: 'application/json', 'api-key': brevoApiKey, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          sender: { name: process.env.BREVO_SENDER_NAME || 'RANNITI 5', email: brevoSenderEmail },
+          to: [{ email: registration.email, name: registration.full_name }],
+          subject,
+          textContent: `Payment confirmed for ${registration.full_name}. Registration ID: ${registration.id}. Entry Pass: ${artifacts.entryPass.pass_number}.`,
+          attachment: attachments,
+        }),
+      });
+      if (response.ok) {
+        await emailLogs.insertOne({ id: uuidv4(), registration_id: registration.id, recipient: registration.email, subject, status: 'Sent', provider: 'brevo', sent_at: sentAt });
+        return { status: 'Sent', provider: 'brevo' };
+      }
+      const text = await response.text().catch(() => '');
+      if (!resendApiKey || !resendFromEmail) throw new Error(text ? `Brevo rejected email: ${text}` : 'Brevo is not configured. Set BREVO_API_KEY and BREVO_SENDER_EMAIL.');
+    }
+
+    if (resendApiKey && resendFromEmail) {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${resendApiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: resendFromEmail,
+          to: [registration.email],
+          subject,
+          text: `Payment confirmed for ${registration.full_name}. Registration ID: ${registration.id}. Entry Pass: ${artifacts.entryPass.pass_number}.`,
+          attachments,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.message || `Resend rejected email: ${JSON.stringify(payload)}`);
+      await emailLogs.insertOne({ id: uuidv4(), registration_id: registration.id, recipient: registration.email, subject, status: 'Sent', provider: 'resend', sent_at: sentAt });
+      return { status: 'Sent', provider: 'resend' };
+    }
+
+    throw new Error('Email is not configured. Set BREVO_API_KEY and BREVO_SENDER_EMAIL, or RESEND_API_KEY and RESEND_FROM_EMAIL.');
   } catch (error) {
-    await emailLogs.insertOne({ id: uuidv4(), registration_id: registration.id, recipient: registration.email, subject, status: 'Failed', sent_at: sentAt, error: error.message });
+    const message = error instanceof Error ? error.message : String(error);
+    await emailLogs.insertOne({ id: uuidv4(), registration_id: registration.id, recipient: registration.email, subject, status: 'Failed', sent_at: sentAt, error: message });
     throw error;
   }
 };

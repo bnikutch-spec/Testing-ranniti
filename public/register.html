@@ -131,7 +131,7 @@
           <div class="section-title">Business Intent</div>
           <div class="grid">
             <div class="field full"><label for="businessIntent">Specific Ask for Business</label><textarea id="businessIntent" name="businessIntent" required placeholder="Tell us what business connection, introduction or opportunity you are looking for."></textarea></div>
-            <div class="field full"><label for="packageSelect">Choose package</label><select id="packageSelect" name="package" required><option value="Triple Occupancy">Triple Occupancy — ₹17,698.82</option><option value="Double Occupancy">Double Occupancy — ₹20,648.82</option><option value="1 Member + 1 Family Member + 1 Kid (Up to 5 years)">Member + Family + Kid up to 5 years — ₹29,999</option><option value="1 Member + 1 Family Member + 1 Kid (Above 5 years)">Member + Family + Kid above 5 years — ₹34,999</option></select></div>
+            <div class="field full"><label for="packageSelect">Choose package</label><select id="packageSelect" name="package" required></select></div>
           </div>
 
           <div class="consents">
@@ -178,13 +178,9 @@
       </div>
     </main>
 
-    <script>
-      const packages = {
-        'Triple Occupancy': '17,698.82',
-        'Double Occupancy': '20,648.82',
-        '1 Member + 1 Family Member + 1 Kid (Up to 5 years)': '29,999',
-        '1 Member + 1 Family Member + 1 Kid (Above 5 years)': '34,999'
-      };
+    <script type="module">
+      import { packages, calculatePackagePrice, formatRupees } from '/package-pricing.js';
+
       const packageSelect = document.getElementById('packageSelect');
       const summaryPackage = document.getElementById('summaryPackage');
       const summaryTotal = document.getElementById('summaryTotal');
@@ -193,15 +189,23 @@
       const paymentQr = document.getElementById('paymentQr');
       const paymentAmount = document.getElementById('paymentAmount');
 
+      Object.entries(packages).forEach(([name, definition]) => {
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = `${name} — ${formatRupees(calculatePackagePrice(definition).total)}`;
+        packageSelect.appendChild(option);
+      });
+
       function updateSummary() {
         const packageName = packageSelect.value;
+        const total = calculatePackagePrice(packages[packageName]).total;
         summaryPackage.textContent = packageName;
-        summaryTotal.textContent = '₹' + packages[packageName];
-        paymentAmount.textContent = '₹' + packages[packageName];
-        paymentQr.src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(`upi://pay?pa=munjalshah9@okicici&pn=Imperial%20Innoventures&am=${packages[packageName].replace(',', '')}&cu=INR`);
+        summaryTotal.textContent = formatRupees(total);
+        paymentAmount.textContent = formatRupees(total);
+        paymentQr.src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(`upi://pay?pa=munjalshah9@okicici&pn=Imperial%20Innoventures&am=${total.toFixed(2)}&cu=INR`);
       }
 
-      if (packages[queryPackage]) packageSelect.value = queryPackage;
+      if (queryPackage && packages[queryPackage]) packageSelect.value = queryPackage;
       updateSummary();
       packageSelect.addEventListener('change', updateSummary);
       const gstNumberInput = document.getElementById('gstNumber');
@@ -211,13 +215,27 @@
         });
       }
 
-      document.getElementById('registrationForm').addEventListener('submit', (event) => {
+      document.getElementById('registrationForm').addEventListener('submit', async (event) => {
         event.preventDefault();
-        const data = Object.fromEntries(new FormData(event.currentTarget).entries());
-        fetch('/api/registrations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
-          .then((response) => response.json().then((body) => ({ response, body })))
-          .then(({ response, body }) => { if (!response.ok) throw new Error(body.message || 'Unable to create registration'); window.location.href = '/payment?registrationId=' + encodeURIComponent(body.registration.id) + '&package=' + encodeURIComponent(packageSelect.value); })
-          .catch((error) => { document.getElementById('formSuccess').textContent = error.message; document.getElementById('formSuccess').style.display = 'block'; });
+        const formData = new FormData(event.currentTarget);
+        try {
+          const response = await fetch('/api/registrations', {
+            method: 'POST',
+            body: formData,
+          });
+          const text = await response.text();
+          let body = {};
+          try { body = text ? JSON.parse(text) : {}; } catch (error) {
+            body = { message: text || 'Unable to create registration' };
+          }
+          if (!response.ok) throw new Error(body.message || 'Unable to create registration');
+          if (!body.registration || !body.registration.id) throw new Error('Registration created but no registration ID was returned.');
+          window.location.href = '/payment?registrationId=' + encodeURIComponent(body.registration.id) + '&package=' + encodeURIComponent(packageSelect.value);
+        } catch (error) {
+          const successNode = document.getElementById('formSuccess');
+          successNode.textContent = error.message;
+          successNode.style.display = 'block';
+        }
       });
       document.getElementById('paymentForm').addEventListener('submit', (event) => {
         event.preventDefault();

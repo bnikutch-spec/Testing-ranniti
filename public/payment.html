@@ -60,14 +60,15 @@
         <form id="paymentForm"><div class="fields"><div class="field"><label for="utrId">UTR ID</label><input id="utrId" name="utrId" required placeholder="Enter your UTR / transaction ID" /></div><div class="field"><label for="paymentProof">Payment proof</label><input id="paymentProof" name="paymentProof" type="file" accept="image/*,.pdf" required /></div></div><button class="button" type="submit">Submit Payment Details</button><div class="success" id="paymentSuccess" role="status">Payment details submitted successfully. Your payment is pending verification.</div></form>
       </section>
     </main>
-    <script>
-      const packages = { 'Triple Occupancy':'17,698.82', 'Double Occupancy':'20,648.82', '1 Member + 1 Family Member + 1 Kid (Up to 5 years)':'29,999', '1 Member + 1 Family Member + 1 Kid (Above 5 years)':'34,999' };
+    <script type="module">
+      import { packages, calculatePackagePrice, formatRupees } from '/package-pricing.js';
+
       const queryPackage = new URLSearchParams(window.location.search).get('package');
       const packageName = packages[queryPackage] ? queryPackage : 'Triple Occupancy';
-      const amount = packages[packageName];
+      const amount = calculatePackagePrice(packages[packageName]).total;
       document.getElementById('packageName').textContent = packageName;
-      document.getElementById('paymentAmount').textContent = '₹' + amount;
-      document.getElementById('paymentQr').src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(`upi://pay?pa=munjalshah9@okicici&pn=Imperial%20Innoventures&am=${amount.replace(',', '')}&cu=INR`);
+      document.getElementById('paymentAmount').textContent = formatRupees(amount);
+      document.getElementById('paymentQr').src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(`upi://pay?pa=munjalshah9@okicici&pn=Imperial%20Innoventures&am=${amount.toFixed(2)}&cu=INR`);
       document.getElementById('paymentForm').addEventListener('submit', async (event) => {
         event.preventDefault();
         const registrationId = new URLSearchParams(window.location.search).get('registrationId');

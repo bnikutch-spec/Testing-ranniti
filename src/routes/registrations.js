@@ -5,22 +5,51 @@ import { v4 as uuidv4 } from 'uuid';
 import { collection } from '../config/database.js';
 import { adminMiddleware, authMiddleware } from '../middleware/authMiddleware.js';
 import { createArtifacts, sendConfirmationEmail } from '../services/documents.js';
+import { calculatePackagePrice, packages } from '../../public/package-pricing.js';
 
 const router = express.Router();
-const packages = { 'Triple Occupancy': 17698.82, 'Double Occupancy': 20648.82, '1 Member + 1 Family Member + 1 Kid (Up to 5 years)': 29999, '1 Member + 1 Family Member + 1 Kid (Above 5 years)': 34999 };
 const publicRegistration = (r) => ({ ...r, registrationId: r.id, package: r.package_name, paymentStatus: r.payment_status, transactionId: r.transaction_id, paymentDate: r.payment_date, entryPassNumber: r.pass_number, invoiceNumber: r.invoice_number });
 
 router.post('/registrations', async (req, res) => {
   const body = req.body || {};
-  const amount = packages[body.package] || Number(body.amount);
-  if (!body.fullName || !body.email || !body.password || body.password.length < 8 || !body.package || !amount) return res.status(400).json({ success: false, message: 'Name, email, password (8+ characters), package and amount are required' });
+  const selectedPackage = packages[body.package] ? body.package : Object.keys(packages).find((name) => name.toLowerCase() === String(body.package || '').trim().toLowerCase());
+  const packageConfig = selectedPackage ? packages[selectedPackage] : null;
+  const computedPrice = packageConfig ? calculatePackagePrice(packageConfig) : null;
+  const amount = selectedPackage ? computedPrice.total : Number(body.amount || 0);
+
+  if (!body.fullName || !body.email || !body.password || body.password.length < 8 || !selectedPackage || !amount) {
+    return res.status(400).json({ success: false, message: 'Name, email, password (8+ characters), and a valid package are required' });
+  }
+
   const id = `RN5-REG-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
   const now = new Date().toISOString();
-  await (await collection('registrations')).insertOne({ id, full_name: body.fullName.trim(), email: body.email.trim().toLowerCase(), mobile: body.mobile || '', company: body.company || '', guest_name: body.guestName || '', region: body.region || '', chapter: body.chapter || '', gst_number: body.gstNumber || '', city: body.city || '', date_of_birth: body.dateOfBirth || '', hoodie_size: body.hoodieSize || '', business_intent: body.businessIntent || '', package_name: body.package, amount, status: 'Pending', created_at: now, updated_at: now });
+  await (await collection('registrations')).insertOne({
+    id,
+    full_name: body.fullName.trim(),
+    email: body.email.trim().toLowerCase(),
+    mobile: body.mobile || '',
+    company: body.company || '',
+    guest_name: body.guestName || '',
+    region: body.region || '',
+    chapter: body.chapter || '',
+    gst_number: body.gstNumber || '',
+    city: body.city || '',
+    date_of_birth: body.dateOfBirth || '',
+    hoodie_size: body.hoodieSize || '',
+    business_intent: body.businessIntent || '',
+    package_name: selectedPackage,
+    package_meta: packageConfig,
+    amount,
+    gst_amount: computedPrice.gstAmount,
+    taxable_amount: computedPrice.base,
+    status: 'Pending',
+    created_at: now,
+    updated_at: now
+  });
   const users = await collection('users');
   const email = body.email.trim().toLowerCase();
   if (!await users.findOne({ email })) await users.insertOne({ id: uuidv4(), name: body.fullName.trim(), email, password_hash: await bcrypt.hash(body.password, 12), role: 'user', created_at: now, updated_at: now });
-  return res.status(201).json({ success: true, registration: { id, amount, package: body.package } });
+  return res.status(201).json({ success: true, registration: { id, amount, package: selectedPackage } });
 });
 
 router.get('/member/dashboard', authMiddleware, async (req, res) => {
@@ -97,6 +126,34 @@ router.patch('/admin/registrations/:registrationId', authMiddleware, adminMiddle
 router.get('/admin/overview', authMiddleware, adminMiddleware, async (req, res) => {
   const [confirmed, payments, invoices, passes, checkins, emailLogs] = await Promise.all([(await collection('registrations')).find({ status: 'Confirmed' }).sort({ updated_at: -1 }).toArray(), (await collection('payments')).find().sort({ updated_at: -1 }).toArray(), (await collection('invoices')).find().sort({ created_at: -1 }).toArray(), (await collection('entry_passes')).find().sort({ created_at: -1 }).toArray(), (await collection('checkins')).find().sort({ checked_at: -1 }).toArray(), (await collection('email_logs')).find().sort({ sent_at: -1 }).toArray()]);
   return res.json({ success: true, confirmed, payments, invoices, passes, checkins, emailLogs });
+});
+
+router.get('/admin/settings', authMiddleware, adminMiddleware, async (req, res) => {
+  const settings = await (await collection('settings')).findOne({ key: 'seller' }) || {};
+  return res.json({ success: true, settings: { name: settings.name || 'Imperial Innoventures', gstin: settings.gstin || '24ADSPV9796P1ZW', pan: settings.pan || 'ADSPV9796P', address: settings.address || 'Gandhidham, Kutch, Gujarat', state: settings.state || settings.state_name || 'Gujarat', stateCode: settings.stateCode || settings.state_code || '24', upiId: settings.upi_id || settings.upiId || 'munjalshah9@okicici', bankName: settings.bank_name || settings.bankName || 'Kotak Mahindra Bank', accountNumber: settings.account_number || settings.accountNumber || '0114137470', branch: settings.branch || 'Gandhidham Branch', ifsc: settings.ifsc || 'KKBK0000822' } });
+});
+
+router.put('/admin/settings', authMiddleware, adminMiddleware, async (req, res) => {
+  const payload = req.body || {};
+  const values = {
+    key: 'seller',
+    name: payload.name || 'Imperial Innoventures',
+    gstin: payload.gstin || '24ADSPV9796P1ZW',
+    pan: payload.pan || 'ADSPV9796P',
+    address: payload.address || 'Gandhidham, Kutch, Gujarat',
+    state: payload.state || 'Gujarat',
+    state_code: payload.stateCode || payload.state_code || '24',
+    upi_id: payload.upiId || payload.upi_id || 'munjalshah9@okicici',
+    bank_name: payload.bankName || payload.bank_name || 'Kotak Mahindra Bank',
+    account_number: payload.accountNumber || payload.account_number || '0114137470',
+    branch: payload.branch || 'Gandhidham Branch',
+    ifsc: payload.ifsc || 'KKBK0000822',
+    phone: payload.phone || '+91 98795 01364',
+    email: payload.email || 'hello@bnikutch.com',
+    updated_at: new Date().toISOString()
+  };
+  await (await collection('settings')).updateOne({ key: 'seller' }, { $set: values }, { upsert: true });
+  return res.json({ success: true, settings: values });
 });
 
 router.post('/admin/payments/:registrationId/confirm', authMiddleware, adminMiddleware, async (req, res) => {

@@ -33,9 +33,26 @@ export const initializeDatabase = async () => {
     db.collection('entry_passes').createIndex({ pass_number: 1 }, { unique: true }),
     db.collection('entry_passes').createIndex({ qr_token: 1 }, { unique: true }),
     db.collection('checkins').createIndex({ registration_id: 1 }, { unique: true }),
+    db.collection('settings').createIndex({ key: 1 }, { unique: true }),
   ]);
   await db.collection('sequences').updateOne({ name: 'invoice' }, { $setOnInsert: { value: 0 } }, { upsert: true });
   await db.collection('sequences').updateOne({ name: 'entry_pass' }, { $setOnInsert: { value: 0 } }, { upsert: true });
+  await db.collection('settings').updateOne({ key: 'seller' }, { $setOnInsert: {
+    key: 'seller',
+    name: 'Imperial Innoventures',
+    gstin: '24ADSPV9796P1ZW',
+    pan: 'ADSPV9796P',
+    address: 'Gandhidham, Kutch, Gujarat',
+    state_name: 'Gujarat',
+    state_code: '24',
+    upi_id: 'munjalshah9@okicici',
+    bank_name: 'Kotak Mahindra Bank',
+    account_number: '0114137470',
+    ifsc: 'KKBK0000822',
+    branch: 'Gandhidham Branch',
+    email: 'hello@bnikutch.com',
+    phone: '+91 98795 01364'
+  } }, { upsert: true });
   console.log(`Connected to MongoDB database ${databaseName}`);
 };
 
