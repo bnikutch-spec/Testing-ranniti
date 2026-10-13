@@ -5,7 +5,7 @@ import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
 import { v4 as uuidv4 } from 'uuid';
 import { collection, nextSequence } from '../config/database.js';
-import { sellerSettings } from '../../public/package-pricing.js';
+import { calculatePackagePrice, packages, sellerSettings } from '../../public/package-pricing.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outputDir = path.join(root, 'data', 'generated');
@@ -40,11 +40,186 @@ const writePdf = async (filename, draw) => {
   return filePath;
 };
 
+const numberToIndianWords = (value) => {
+  const ones = ['Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+  const belowHundred = (number) => number < 20 ? ones[number] : `${tens[Math.floor(number / 10)]}${number % 10 ? ` ${ones[number % 10]}` : ''}`;
+  if (value < 20) return ones[value];
+  if (value < 100) return belowHundred(value);
+  if (value < 1000) return `${ones[Math.floor(value / 100)]} Hundred${value % 100 ? ` ${belowHundred(value % 100)}` : ''}`;
+  for (const [divisor, label] of [[10000000, 'Crore'], [100000, 'Lakh'], [1000, 'Thousand']]) {
+    if (value >= divisor) return `${numberToIndianWords(Math.floor(value / divisor))} ${label}${value % divisor ? ` ${numberToIndianWords(value % divisor)}` : ''}`;
+  }
+  return `${numberToIndianWords(Math.floor(value / 100))} Hundred${value % 100 ? ` ${belowHundred(value % 100)}` : ''}`;
+};
+
+export const formatIndianAmountInWords = (amount) => {
+  const paiseTotal = Math.round(Number(amount || 0) * 100);
+  const rupees = Math.floor(paiseTotal / 100);
+  const paise = paiseTotal % 100;
+  return `Indian Rupees ${numberToIndianWords(rupees)}${paise ? ` and ${numberToIndianWords(paise)} Paise` : ''} Only`;
+};
+
+export const getInvoiceBreakdown = (registration) => {
+  const packageConfig = registration.package_meta || packages[registration.package_name] || {};
+  const packagePrice = packageConfig.base == null ? null : calculatePackagePrice(packageConfig);
+  const gstPercent = Number(packageConfig.gstPercent ?? 18);
+  const amount = Number(registration.amount ?? 0);
+  const taxableValue = Number(registration.taxable_amount ?? packagePrice?.base ?? (amount / (1 + gstPercent / 100)).toFixed(2));
+  const gstAmount = Number(registration.gst_amount ?? packagePrice?.gstAmount ?? (taxableValue * gstPercent / 100).toFixed(2));
+  const total = Number(registration.amount ?? taxableValue + gstAmount);
+  const cgstAmount = Number((gstAmount / 2).toFixed(2));
+  const sgstAmount = Number((gstAmount - cgstAmount).toFixed(2));
+  const roundOff = Number((total - taxableValue - gstAmount).toFixed(2));
+  return {
+    hsnCode: packageConfig.hsCode || '998311',
+    gstPercent,
+    taxableValue,
+    gstAmount,
+    cgstAmount,
+    sgstAmount,
+    roundOff: Math.abs(roundOff) < 0.005 ? 0 : roundOff,
+    total,
+  };
+};
+
+export const renderInvoicePdf = (registration, payment, invoiceNumber, seller, issuedAt) => pdfBuffer((doc) => {
+  const breakdown = getInvoiceBreakdown(registration);
+  const formatAmount = (value) => Number(value).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const invoiceDate = new Date(issuedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }).replaceAll(' ', '-');
+  const sellerState = seller.state || seller.state_name || 'Gujarat';
+  const sellerStateCode = seller.stateCode || seller.state_code || '24';
+  const buyerName = registration.company || registration.business_name || registration.full_name || 'Customer';
+  const buyerAddress = registration.business_address || registration.address || [registration.city, registration.state].filter(Boolean).join(', ') || '—';
+  const buyerState = registration.state || sellerState;
+  const buyerStateCode = registration.state_code || sellerStateCode;
+  const packageName = registration.package_name || registration.package || 'RANNITI 5 event registration';
+  const amountWords = formatIndianAmountInWords(breakdown.total);
+  const taxWords = formatIndianAmountInWords(breakdown.gstAmount);
+  const left = 34;
+  const right = 561;
+  const width = right - left;
+  const line = (x1, y1, x2, y2) => doc.moveTo(x1, y1).lineTo(x2, y2).lineWidth(0.55).strokeColor('#222222').stroke();
+  const metaCell = (label, value, x, y, cellWidth) => {
+    doc.fillColor('#555555').font('Helvetica').fontSize(7).text(label, x + 6, y + 4, { width: cellWidth - 12, lineBreak: false });
+    doc.fillColor('#111111').font('Helvetica-Bold').fontSize(8).text(String(value || '—'), x + 6, y + 17, { width: cellWidth - 12, height: 17, ellipsis: true });
+  };
+
+  doc.rect(0, 0, 595, 842).fill('#ffffff');
+  doc.fillColor('#111111').font('Helvetica-Bold').fontSize(16).text('Tax Invoice', left, 23, { width, align: 'center' });
+
+  const headerTop = 49;
+  const headerBottom = 250;
+  const split = 308;
+  const metaSplit = 434;
+  doc.rect(left, headerTop, width, headerBottom - headerTop).lineWidth(0.7).strokeColor('#222222').stroke();
+  line(split, headerTop, split, headerBottom);
+  [130, 184].forEach((y) => line(left, y, split, y));
+  [88, 127, 166, 205, 230].forEach((y) => line(split, y, right, y));
+  [headerTop, 88, 127, 166, 205].forEach((y) => line(metaSplit, y, metaSplit, y + (y === headerTop ? 39 : 39)));
+
+  doc.fillColor('#111111').font('Helvetica-Bold').fontSize(10).text(String(seller.name || 'Imperial Innoventures').toUpperCase(), left + 8, 56, { width: split - left - 16 });
+  doc.font('Helvetica').fontSize(8).text(seller.address || 'Gandhidham, Kutch, Gujarat', left + 8, 72, { width: split - left - 16, height: 30 });
+  doc.text(`GSTIN/UIN: ${seller.gstin || '24ADSPV9796P1ZW'}`, left + 8, 105, { width: split - left - 16 });
+  doc.text(`State Name : ${sellerState}, Code : ${sellerStateCode}`, left + 8, 117, { width: split - left - 16 });
+
+  doc.font('Helvetica').fontSize(7).fillColor('#444444').text('Consignee (Ship to)', left + 8, 135);
+  doc.font('Helvetica-Bold').fontSize(9).fillColor('#111111').text(buyerName, left + 8, 148, { width: split - left - 16 });
+  doc.font('Helvetica').fontSize(8).text(buyerAddress, left + 8, 161, { width: split - left - 16, height: 20 });
+  doc.text(`State Name : ${buyerState}, Code : ${buyerStateCode}`, left + 8, 174, { width: split - left - 16 });
+
+  doc.font('Helvetica').fontSize(7).fillColor('#444444').text('Buyer (Bill to)', left + 8, 189);
+  doc.font('Helvetica-Bold').fontSize(9).fillColor('#111111').text(registration.full_name || buyerName, left + 8, 202, { width: split - left - 16 });
+  doc.font('Helvetica').fontSize(8).text(buyerAddress, left + 8, 215, { width: split - left - 16, height: 18 });
+  doc.text(`GSTIN/UIN: ${registration.gst_number || '—'}`, left + 8, 234, { width: split - left - 16 });
+
+  const metaWidth = right - split;
+  const halfMeta = metaSplit - split;
+  metaCell('Invoice No.', invoiceNumber, split, 49, halfMeta);
+  metaCell('Dated', invoiceDate, metaSplit, 49, right - metaSplit);
+  metaCell('Delivery Note', '—', split, 88, halfMeta);
+  metaCell('Mode/Terms of Payment', payment?.gateway || '—', metaSplit, 88, right - metaSplit);
+  metaCell('Reference No. & Date', payment?.transaction_id || '—', split, 127, halfMeta);
+  metaCell('Other References', registration.id, metaSplit, 127, right - metaSplit);
+  metaCell("Buyer's Order No.", registration.id, split, 166, halfMeta);
+  metaCell('Dated', invoiceDate, metaSplit, 166, right - metaSplit);
+  metaCell('Event', 'RANNITI 5 Strategy Summit', split, 205, halfMeta);
+  metaCell('Destination', 'Dhordo, Kutch', metaSplit, 205, right - metaSplit);
+  doc.fillColor('#555555').font('Helvetica').fontSize(7).text('Terms of Delivery: Event registration', split + 6, 235, { width: metaWidth - 12 });
+
+  const tableTop = 270;
+  const headerHeight = 40;
+  const columns = [28, 202, 57, 43, 67, 38, 92];
+  const xPositions = [left];
+  columns.forEach((columnWidth) => xPositions.push(xPositions.at(-1) + columnWidth));
+  const rowLines = [tableTop, tableTop + headerHeight, tableTop + headerHeight + 34, tableTop + headerHeight + 56, tableTop + headerHeight + 78, tableTop + headerHeight + 100, tableTop + headerHeight + 126];
+  doc.rect(left, tableTop, width, rowLines.at(-1) - tableTop).lineWidth(0.7).strokeColor('#222222').stroke();
+  xPositions.slice(1, -1).forEach((x) => line(x, tableTop, x, rowLines.at(-1)));
+  rowLines.slice(1, -1).forEach((y) => line(left, y, right, y));
+  const headerLabels = ['Sl No.', 'Particulars', 'HSN/SAC', 'Quantity', 'Rate', 'per', 'Amount'];
+  headerLabels.forEach((label, index) => {
+    doc.fillColor('#111111').font('Helvetica-Bold').fontSize(7.5).text(label, xPositions[index] + 3, tableTop + 12, { width: columns[index] - 6, align: index === 1 ? 'center' : 'center' });
+  });
+
+  const rowText = (index, text, y, rowHeight, align = 'left', bold = false) => {
+    doc.fillColor('#111111').font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(8).text(String(text), xPositions[index] + 4, y + Math.max(5, (rowHeight - 10) / 2), { width: columns[index] - 8, height: rowHeight - 4, align, ellipsis: true });
+  };
+  const dataTop = tableTop + headerHeight;
+  rowText(0, '1', dataTop, 34, 'center');
+  rowText(1, packageName, dataTop, 34, 'left', true);
+  rowText(2, breakdown.hsnCode, dataTop, 34, 'center');
+  rowText(3, '1', dataTop, 34, 'right');
+  rowText(4, formatAmount(breakdown.taxableValue), dataTop, 34, 'right');
+  rowText(5, 'Unit', dataTop, 34, 'center');
+  rowText(6, formatAmount(breakdown.taxableValue), dataTop, 34, 'right', true);
+  rowText(1, `OUTPUT CGST @ ${breakdown.gstPercent / 2}%`, dataTop + 34, 22);
+  rowText(4, `${breakdown.gstPercent / 2}%`, dataTop + 34, 22, 'right');
+  rowText(6, formatAmount(breakdown.cgstAmount), dataTop + 34, 22, 'right');
+  rowText(1, `OUTPUT SGST @ ${breakdown.gstPercent / 2}%`, dataTop + 56, 22);
+  rowText(4, `${breakdown.gstPercent / 2}%`, dataTop + 56, 22, 'right');
+  rowText(6, formatAmount(breakdown.sgstAmount), dataTop + 56, 22, 'right');
+  rowText(1, 'ROUND OFF', dataTop + 78, 22);
+  rowText(6, formatAmount(breakdown.roundOff), dataTop + 78, 22, 'right');
+  rowText(5, 'Total', dataTop + 100, 26, 'right', true);
+  rowText(6, `₹ ${formatAmount(breakdown.total)}`, dataTop + 100, 26, 'right', true);
+
+  const wordsTop = rowLines.at(-1) + 9;
+  doc.fillColor('#444444').font('Helvetica').fontSize(7).text('Amount Chargeable (in words)', left + 2, wordsTop, { width: width - 4 });
+  doc.fillColor('#111111').font('Helvetica-Bold').fontSize(8).text(amountWords, left + 2, wordsTop + 12, { width: width - 4 });
+
+  const taxTop = wordsTop + 38;
+  const taxColumns = [72, 80, 45, 70, 45, 70, 145];
+  const taxX = [left];
+  taxColumns.forEach((columnWidth) => taxX.push(taxX.at(-1) + columnWidth));
+  const taxBottom = taxTop + 80;
+  doc.rect(left, taxTop, width, taxBottom - taxTop).lineWidth(0.6).strokeColor('#222222').stroke();
+  taxX.slice(1, -1).forEach((x) => line(x, taxTop, x, taxBottom));
+  [taxTop + 36, taxTop + 58].forEach((y) => line(left, y, right, y));
+  const taxHeaders = ['HSN/SAC', 'Taxable Value', 'CGST Rate', 'Amount', 'SGST/UTGST Rate', 'Amount', 'Total Tax Amount'];
+  taxHeaders.forEach((label, index) => doc.fillColor('#111111').font('Helvetica-Bold').fontSize(6.5).text(label, taxX[index] + 3, taxTop + 12, { width: taxColumns[index] - 6, align: 'center' }));
+  const taxRow = [breakdown.hsnCode, formatAmount(breakdown.taxableValue), `${breakdown.gstPercent / 2}%`, formatAmount(breakdown.cgstAmount), `${breakdown.gstPercent / 2}%`, formatAmount(breakdown.sgstAmount), formatAmount(breakdown.gstAmount)];
+  taxRow.forEach((value, index) => doc.fillColor('#111111').font('Helvetica').fontSize(7).text(value, taxX[index] + 3, taxTop + 42, { width: taxColumns[index] - 6, align: index === 0 ? 'left' : 'right' }));
+  doc.fillColor('#111111').font('Helvetica-Bold').fontSize(7).text('Total', taxX[0] + 3, taxTop + 64, { width: taxColumns[0] - 6 });
+  doc.text(formatAmount(breakdown.taxableValue), taxX[1] + 3, taxTop + 64, { width: taxColumns[1] - 6, align: 'right' });
+  doc.text(formatAmount(breakdown.cgstAmount), taxX[3] + 3, taxTop + 64, { width: taxColumns[3] - 6, align: 'right' });
+  doc.text(formatAmount(breakdown.sgstAmount), taxX[5] + 3, taxTop + 64, { width: taxColumns[5] - 6, align: 'right' });
+  doc.text(formatAmount(breakdown.gstAmount), taxX[6] + 3, taxTop + 64, { width: taxColumns[6] - 6, align: 'right' });
+
+  doc.fillColor('#111111').font('Helvetica').fontSize(8).text(`Tax Amount (in words): ${taxWords}`, left, taxBottom + 10, { width });
+  doc.rect(left, taxBottom + 31, width, 61).lineWidth(0.6).strokeColor('#222222').stroke();
+  doc.font('Helvetica').fontSize(8).text(`Company's PAN : ${seller.pan || 'ADSPV9796P'}`, left + 7, taxBottom + 65);
+  doc.font('Helvetica-Bold').fontSize(9).text(`for ${String(seller.name || 'Imperial Innoventures').toUpperCase()}`, left + 215, taxBottom + 39, { width: width - 222, align: 'right' });
+  line(left + 278, taxBottom + 77, right - 8, taxBottom + 77);
+  doc.font('Helvetica').fontSize(7).text('Authorised Signatory', left + 278, taxBottom + 80, { width: width - 286, align: 'right' });
+  doc.font('Helvetica').fontSize(8).text('This is a Computer Generated Invoice', left, taxBottom + 101, { width, align: 'center' });
+});
+
 export const createArtifacts = async (registration, payment) => {
   const invoices = await collection('invoices');
   const passes = await collection('entry_passes');
   const settings = await (await collection('settings')).findOne({ key: 'seller' }) || {};
   const seller = { ...sellerSettings, ...(settings || {}) };
+  if (seller.address === 'Gandhidham, Kutch, Gujarat') seller.address = sellerSettings.address;
   const existing = await invoices.findOne({ registration_id: registration.id });
   const existingPass = existing && await passes.findOne({ registration_id: registration.id });
   const now = new Date().toISOString();
@@ -54,75 +229,13 @@ export const createArtifacts = async (registration, payment) => {
   const logo = await getLogo();
   const eventDate = '18–20 December 2026';
   const eventVenue = 'Dhordo, Kutch';
-  const gstRate = 18;
-  const taxableValue = Number(registration.taxable_amount || registration.amount || 0);
-  const gstValue = Number(registration.gst_amount || (taxableValue * gstRate / 100));
-  const total = Number(registration.amount || taxableValue + gstValue);
-  const drawBrand = (doc, title, number) => {
-    doc.save().rect(0, 0, 595, 116).fill('#151515').restore();
-    if (logo) doc.image(logo, 48, 28, { fit: [128, 54] });
-    else doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(25).text('RANNITI 5', 48, 39);
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(18).text(title, 350, 37, { width: 197, align: 'right' });
-    doc.fillColor('#e8e1dc').font('Helvetica').fontSize(9).text(number, 350, 66, { width: 197, align: 'right' });
-    doc.fillColor('#d71920').rect(0, 112, 595, 4).fill();
-  };
-  const drawFooter = (doc) => {
-    doc.fillColor('#77736f').font('Helvetica').fontSize(8).text('RANNITI 5 Strategy Summit  |  BNI Kutch  |  Dhordo, Kutch', 48, 776, { width: 499, align: 'center' });
-  };
   const drawField = (doc, label, value, x, y, width) => {
     doc.fillColor('#77736f').font('Helvetica-Bold').fontSize(8).text(label.toUpperCase(), x, y, { width });
     doc.fillColor('#151515').font('Helvetica').fontSize(11).text(String(value || '—'), x, y + 13, { width });
   };
-  const invoicePath = await writePdf(`${invoiceNumber}.pdf`, (doc) => {
-    const amount = `INR ${Number(total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
-    const invoiceDate = new Date(now).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' });
-    doc.rect(0, 0, 595, 841).fill('#ffffff');
-    doc.save().path('M 395 0 L 595 0 L 595 154 L 438 114 Z').fill('#b50813').restore();
-    doc.save().path('M 365 0 L 595 0 L 595 132 L 420 93 Z').fill('#e11925').restore();
-    if (logo) doc.image(logo, 48, 36, { fit: [215, 82] });
-    else doc.fillColor('#d71920').font('Helvetica-Bold').fontSize(35).text('RANNITI 5', 48, 55);
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9).text('BIGGER NETWORKS', 466, 40, { width: 100, align: 'left' });
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9).text('STRONGER BUSINESS', 466, 56, { width: 110, align: 'left' });
-    doc.fillColor('#151c2b').font('Helvetica-Bold').fontSize(31).text('TAX INVOICE', 76, 172);
-    doc.fillColor('#38465c').font('Helvetica').fontSize(11).text('RANNITI 5 · EVENT REGISTRATION', 77, 211);
-    doc.fillColor('#d71920').rect(48, 246, 499, 2).fill();
-    drawField(doc, 'Invoice number', invoiceNumber, 48, 274, 150);
-    doc.fillColor('#d0d5dd').rect(208, 269, 1, 46).fill();
-    drawField(doc, 'Date', invoiceDate, 228, 274, 180);
-    drawField(doc, 'GSTIN', seller.gstin || '24ADSPV9796P1ZW', 420, 274, 120);
-    doc.fillColor('#16a05d').roundedRect(454, 330, 93, 31, 16).fill();
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(10).text('✓  PAID', 454, 340, { width: 93, align: 'center' });
-    doc.fillColor('#f4f5f8').roundedRect(48, 344, 499, 138, 7).fill();
-    doc.fillColor('#68758a').font('Helvetica').fontSize(9).text('Billed to', 64, 366);
-    doc.fillColor('#1d2a40').font('Helvetica-Bold').fontSize(13).text(registration.full_name, 64, 386);
-    doc.fillColor('#38465c').font('Helvetica').fontSize(9).text(`Email: ${registration.email}`, 64, 410);
-    doc.text(`Phone: ${registration.mobile || '—'}`, 64, 426);
-    doc.text(`GST: ${registration.gst_number || 'Not Provided'}`, 64, 442);
-    doc.fillColor('#68758a').font('Helvetica').fontSize(9).text('Seller', 340, 366);
-    doc.fillColor('#1d2a40').font('Helvetica-Bold').fontSize(12).text(seller.name || 'Imperial Innoventures', 340, 386, { width: 170 });
-    doc.fillColor('#38465c').font('Helvetica').fontSize(9).text(`${seller.address || 'Gandhidham, Kutch, Gujarat'}`, 340, 412, { width: 165 });
-    doc.text(`GSTIN: ${seller.gstin || '24ADSPV9796P1ZW'}`, 340, 440, { width: 165 });
-    doc.fillColor('#d71920').rect(48, 500, 499, 35).fill();
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(11).text('Description', 64, 512);
-    doc.text('Taxable Value', 260, 512, { width: 100, align: 'right' });
-    doc.text('GST @ 18%', 365, 512, { width: 70, align: 'right' });
-    doc.text('Total', 450, 512, { width: 80, align: 'right' });
-    doc.fillColor('#f9fafc').rect(48, 535, 499, 58).fill();
-    doc.fillColor('#1d2a40').font('Helvetica').fontSize(10).text(registration.package_name || 'RANNITI 5 event registration', 64, 558, { width: 185 });
-    doc.fillColor('#1d2a40').font('Helvetica-Bold').fontSize(10).text(`INR ${Number(taxableValue).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, 255, 558, { width: 92, align: 'right' });
-    doc.fillColor('#1d2a40').font('Helvetica-Bold').fontSize(10).text(`INR ${Number(gstValue).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, 350, 558, { width: 88, align: 'right' });
-    doc.fillColor('#1d2a40').font('Helvetica-Bold').fontSize(10).text(`INR ${Number(total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, 432, 558, { width: 90, align: 'right' });
-    doc.fillColor('#fff3f3').roundedRect(48, 618, 499, 86, 7).fill();
-    doc.fillColor('#d71920').circle(83, 665, 21).fill();
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(21).text('₹', 75, 654);
-    doc.fillColor('#68758a').font('Helvetica').fontSize(10).text('Total amount', 123, 650);
-    doc.fillColor('#d71920').font('Helvetica-Bold').fontSize(21).text(amount, 123, 670);
-    doc.fillColor('#1d2a40').font('Helvetica').fontSize(9).text(`Amount in words: ${new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(total)} INR only`, 300, 666, { width: 220 });
-    doc.fillColor('#d71920').font('Helvetica-Oblique').fontSize(20).text('Thank You!', 48, 726);
-    doc.fillColor('#38465c').font('Helvetica').fontSize(9).text('We are excited to have you join RANNITI 5.', 48, 756);
-    doc.text('Your participation makes this journey stronger!', 48, 770);
-    doc.save().rect(0, 780, 595, 61).fill('#151c2b').restore();
-  });
+  const invoicePath = path.join(outputDir, `${invoiceNumber}.pdf`);
+  await fs.mkdir(outputDir, { recursive: true });
+  await fs.writeFile(invoicePath, await renderInvoicePdf(registration, payment, invoiceNumber, seller, now));
   const qrData = await QRCode.toDataURL(qrToken, { margin: 1, width: 220 });
   const entryPassPath = await writePdf(`${passNumber}.pdf`, (doc) => {
     doc.rect(0, 0, 595, 841).fill('#ffffff');

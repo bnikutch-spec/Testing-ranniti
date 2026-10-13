@@ -130,7 +130,9 @@ router.get('/admin/overview', authMiddleware, adminMiddleware, async (req, res) 
 
 router.get('/admin/settings', authMiddleware, adminMiddleware, async (req, res) => {
   const settings = await (await collection('settings')).findOne({ key: 'seller' }) || {};
-  return res.json({ success: true, settings: { name: settings.name || 'Imperial Innoventures', gstin: settings.gstin || '24ADSPV9796P1ZW', pan: settings.pan || 'ADSPV9796P', address: settings.address || 'Gandhidham, Kutch, Gujarat', state: settings.state || settings.state_name || 'Gujarat', stateCode: settings.stateCode || settings.state_code || '24', upiId: settings.upi_id || settings.upiId || 'munjalshah9@okicici', bankName: settings.bank_name || settings.bankName || 'Kotak Mahindra Bank', accountNumber: settings.account_number || settings.accountNumber || '0114137470', branch: settings.branch || 'Gandhidham Branch', ifsc: settings.ifsc || 'KKBK0000822' } });
+  const defaultAddress = 'Ground Floor, Shop No. 5, Plot No. 231, Ward - 12B, Ratnakala Arcade, Gandhidham';
+  const address = settings.address === 'Gandhidham, Kutch, Gujarat' ? defaultAddress : settings.address || defaultAddress;
+  return res.json({ success: true, settings: { name: settings.name || 'Imperial Innoventures', gstin: settings.gstin || '24ADSPV9796P1ZW', pan: settings.pan || 'ADSPV9796P', address, state: settings.state || settings.state_name || 'Gujarat', stateCode: settings.stateCode || settings.state_code || '24', upiId: settings.upi_id || settings.upiId || 'munjalshah9@okicici', bankName: settings.bank_name || settings.bankName || 'Kotak Mahindra Bank', accountNumber: settings.account_number || settings.accountNumber || '0114137470', branch: settings.branch || 'Gandhidham Branch', ifsc: settings.ifsc || 'KKBK0000822' } });
 });
 
 router.put('/admin/settings', authMiddleware, adminMiddleware, async (req, res) => {
@@ -140,7 +142,7 @@ router.put('/admin/settings', authMiddleware, adminMiddleware, async (req, res) 
     name: payload.name || 'Imperial Innoventures',
     gstin: payload.gstin || '24ADSPV9796P1ZW',
     pan: payload.pan || 'ADSPV9796P',
-    address: payload.address || 'Gandhidham, Kutch, Gujarat',
+    address: payload.address || 'Ground Floor, Shop No. 5, Plot No. 231, Ward - 12B, Ratnakala Arcade, Gandhidham',
     state: payload.state || 'Gujarat',
     state_code: payload.stateCode || payload.state_code || '24',
     upi_id: payload.upiId || payload.upi_id || 'munjalshah9@okicici',

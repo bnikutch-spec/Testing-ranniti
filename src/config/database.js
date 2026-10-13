@@ -42,7 +42,7 @@ export const initializeDatabase = async () => {
     name: 'Imperial Innoventures',
     gstin: '24ADSPV9796P1ZW',
     pan: 'ADSPV9796P',
-    address: 'Gandhidham, Kutch, Gujarat',
+    address: 'Ground Floor, Shop No. 5, Plot No. 231, Ward - 12B, Ratnakala Arcade, Gandhidham',
     state_name: 'Gujarat',
     state_code: '24',
     upi_id: 'munjalshah9@okicici',

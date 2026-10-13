@@ -37,7 +37,7 @@ export const sellerSettings = {
   name: 'Imperial Innoventures',
   gstin: '24ADSPV9796P1ZW',
   pan: 'ADSPV9796P',
-  address: 'Gandhidham, Kutch, Gujarat',
+  address: 'Ground Floor, Shop No. 5, Plot No. 231, Ward - 12B, Ratnakala Arcade, Gandhidham',
   state: 'Gujarat',
   stateCode: '24',
   phone: '+91 98795 01364',
